@@ -8,6 +8,8 @@
 	xmlns:v="clr-namespace:Unclassified.TxEditor.Views"
 	xmlns:vm="clr-namespace:Unclassified.TxEditor.ViewModels"
 	xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
 	TextOptions.TextFormattingMode="Display"
 	Title="{Binding DisplayName}"
 	Height="296" Width="1304" UseLayoutRounding="True"
@@ -15,7 +17,10 @@
 	AllowDrop="True" Drop="Window_Drop"
 	Loaded="Window_Loaded" Closing="Window_Closing"
 	PreviewKeyDown="Window_PreviewKeyDown"
-	x:Name="_this">
+	x:Name="_this"
+    d:DataContext="{d:DesignInstance vm:MainViewModel}"
+    mc:Ignorable="d">
+
 
 	<Window.Resources>
 		<ui:TextHighlightConverter x:Key="textHighlightConverter"/>

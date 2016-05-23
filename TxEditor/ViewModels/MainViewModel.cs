@@ -52,7 +52,7 @@ namespace Unclassified.TxEditor.ViewModels
 			TextKeys = new Dictionary<string, TextKeyViewModel>();
 			LoadedCultureNames = new HashSet<string>();
 			DeletedCultureNames = new HashSet<string>();
-			RootTextKey = new TextKeyViewModel(null, false, null, this);
+			RootTextKey = new RootKeyViewModel(this);
 			ProblemKeys = new ObservableHashSet<TextKeyViewModel>();
 
 			searchDc = DelayedCall.Create(UpdateSearch, 250);

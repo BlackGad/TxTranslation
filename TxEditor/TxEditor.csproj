@@ -145,6 +145,7 @@
     <Compile Include="Unclassified\Util\UnicodeInfo.cs" />
     <Compile Include="Unclassified\Util\WinApi_Input.cs" />
     <Compile Include="Unclassified\Util\WinApi_Windows.cs" />
+    <Compile Include="ViewModels\RootKeyViewModel.cs" />
     <Compile Include="ViewModels\CultureTextViewModel.cs" />
     <Compile Include="ViewModels\DetailsMessageViewModel.cs" />
     <Compile Include="ViewModels\SelectFileViewModel.cs" />

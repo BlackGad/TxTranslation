@@ -13,6 +13,7 @@ using System.Xml;
 using Microsoft.Win32;
 using TaskDialogInterop;
 using Unclassified.FieldLog;
+using Unclassified.TxEditor.Models;
 using Unclassified.TxEditor.Views;
 using Unclassified.TxLib;
 using Unclassified.UI;
@@ -2195,120 +2196,64 @@ namespace Unclassified.TxEditor.ViewModels
 
 		private void LoadFromXml(string cultureName, XmlElement xe)
 		{
-			// Add the new culture everywhere
+		    // Add the new culture everywhere
 			if (!LoadedCultureNames.Contains(cultureName))
 			{
 				AddNewCulture(RootTextKey, cultureName, false);
 			}
 
-			// Read the XML document
-			foreach (XmlNode textNode in xe.SelectNodes("text[@key]"))
-			{
-				string text = textNode.InnerText;
-				string key = textNode.Attributes["key"].Value;
+            // Read the XML document
+            foreach (XmlNode textNode in xe.SelectNodes("text[@key]"))
+            {
+                var serialized = SerializeProvider.Instance.DeserializeKey(textNode);
+                if(serialized == null) continue;
 
-				string errorMessage;
-				if (!TextKeyViewModel.ValidateName(key, out errorMessage))
-				{
-					//Log("Load XML: Invalid key: " + errorMessage + " Ignoring definition.");
-					continue;
-				}
-
-				int count = -1;
-				XmlAttribute countAttr = textNode.Attributes["count"];
-				if (countAttr != null)
-				{
-					if (!int.TryParse(countAttr.Value, out count))
-					{
-						// Count value unparsable. Skip invalid entries
-						//Log("Load XML: Count attribute value of key {0} is not an integer. Ignoring definition.", key);
-						continue;
-					}
-					if (count < 0 || count > ushort.MaxValue)
-					{
-						// Count value out of range. Skip invalid entries
-						//Log("Load XML: Count attribute value of key {0} is out of range. Ignoring definition.", key);
-						continue;
-					}
-				}
-
-				int modulo = 0;
-				XmlAttribute moduloAttr = textNode.Attributes["mod"];
-				if (moduloAttr != null)
-				{
-					if (!int.TryParse(moduloAttr.Value, out modulo))
-					{
-						// Modulo value unparsable. Skip invalid entries
-						//Log("Load XML: Modulo attribute of key {0} is not an integer. Ignoring definition.", key);
-						continue;
-					}
-					if (modulo < 2 || modulo > 1000)
-					{
-						// Modulo value out of range. Skip invalid entries
-						//Log("Load XML: Modulo attribute of key {0} is out of range. Ignoring definition.", key);
-						continue;
-					}
-				}
-
-				string comment = null;
-				XmlAttribute commentAttr = textNode.Attributes["comment"];
-				if (commentAttr != null)
-				{
-					comment = commentAttr.Value;
-					if (string.IsNullOrWhiteSpace(comment))
-						comment = null;
-				}
-
-				XmlAttribute acceptMissingAttr = textNode.Attributes["acceptmissing"];
-				bool acceptMissing = acceptMissingAttr != null && acceptMissingAttr.Value == "true";
-
-				XmlAttribute acceptPlaceholdersAttr = textNode.Attributes["acceptplaceholders"];
-				bool acceptPlaceholders = acceptPlaceholdersAttr != null && acceptPlaceholdersAttr.Value == "true";
-
-				XmlAttribute acceptPunctuationAttr = textNode.Attributes["acceptpunctuation"];
-				bool acceptPunctuation = acceptPunctuationAttr != null && acceptPunctuationAttr.Value == "true";
-
-				// TODO: Catch exceptions NonNamespaceExistsException and NamespaceExistsException for invalid files
-				TextKeyViewModel tk = FindOrCreateTextKey(key);
-
-				if (comment != null)
-					tk.Comment = comment;
+                string errorMessage;
+                if (!TextKeyViewModel.ValidateName(serialized.Key, out errorMessage))
+                {
+                    //Log("Load XML: Invalid key: " + errorMessage + " Ignoring definition.");
+                    continue;
+                }
+                
+                // TODO: Catch exceptions NonNamespaceExistsException and NamespaceExistsException for invalid files
+                var tk = FindOrCreateTextKey(serialized.Key);
+				if (serialized.Comment != null) tk.Comment = serialized.Comment;
 
 				// Ensure that all loaded cultures exist in every text key so that they can be entered
 				foreach (string cn in LoadedCultureNames)
 				{
 					EnsureCultureInTextKey(tk, cn);
 				}
+
 				tk.UpdateCultureTextSeparators();
 
 				// Find the current culture
-				var ct = tk.CultureTextVMs.FirstOrDefault(vm => vm.CultureName == cultureName);
-				if (count == -1)
+				var ct = tk.CultureTextVMs.First(vm => vm.CultureName == cultureName);
+				if (serialized.Count == -1)
 				{
 					// Default text, store it directly in the item
-					ct.Text = text;
-					ct.AcceptMissing = acceptMissing;
-					ct.AcceptPlaceholders = acceptPlaceholders;
-					ct.AcceptPunctuation = acceptPunctuation;
+					ct.Text = serialized.Text;
+					ct.AcceptMissing = serialized.AcceptMissing;
+					ct.AcceptPlaceholders = serialized.AcceptPlaceholders;
+					ct.AcceptPunctuation = serialized.AcceptPunctuation;
 				}
 				else
 				{
 					// Quantified text, go deeper
 					// Update existing entry or create and add a new one
-					QuantifiedTextViewModel qt = ct.QuantifiedTextVMs
-						.FirstOrDefault(q => q.Count == count && q.Modulo == modulo);
+					var qt = ct.QuantifiedTextVMs.FirstOrDefault(q => q.Count == serialized.Count && q.Modulo == serialized.Modulo);
 
-					bool newQt = qt == null;
+					var newQt = qt == null;
 					if (qt == null)
 					{
 						qt = new QuantifiedTextViewModel(ct);
-						qt.Count = count;
-						qt.Modulo = modulo;
+						qt.Count = serialized.Count;
+						qt.Modulo = serialized.Modulo;
 					}
-					qt.Text = text;
-					qt.AcceptMissing = acceptMissing;
-					qt.AcceptPlaceholders = acceptPlaceholders;
-					qt.AcceptPunctuation = acceptPunctuation;
+					qt.Text = serialized.Text;
+					qt.AcceptMissing = serialized.AcceptMissing;
+					qt.AcceptPlaceholders = serialized.AcceptPlaceholders;
+					qt.AcceptPunctuation = serialized.AcceptPunctuation;
 					if (newQt)
 					{
 						ct.QuantifiedTextVMs.InsertSorted(qt, (a, b) => QuantifiedTextViewModel.Compare(a, b));

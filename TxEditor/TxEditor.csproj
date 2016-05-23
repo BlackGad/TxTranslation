@@ -93,7 +93,9 @@
     <Compile Include="Converters\UnicodeInfoConverter.cs" />
     <Compile Include="Exceptions.cs" />
     <Compile Include="FileNameHelper.cs" />
+    <Compile Include="Models\SerializeProvider\SerializedKey.cs" />
     <Compile Include="Program.cs" />
+    <Compile Include="Models\SerializeProvider\SerializeProvider.cs" />
     <Compile Include="Unclassified\UI\BooleanBoxes.cs" />
     <Compile Include="Unclassified\UI\ListBoxExtensions.cs" />
     <Compile Include="Unclassified\UI\MenuExtensions.cs" />

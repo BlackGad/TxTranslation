@@ -1,16 +1,18 @@
-﻿using System.Xml;
-
-namespace Unclassified.TxEditor.Models
+﻿namespace Unclassified.TxEditor.Models
 {
     public interface IVersionSerializer : IVersionSerializerDescription
     {
         #region Members
 
-        SerializedTranslation Deserialize(ISerializeLocation location, XmlDocument document);
+        SerializedTranslation Deserialize(ISerializeLocation location);
 
-        bool IsValid(ISerializeLocation location, XmlDocument document);
+        ISerializeLocation[] GetRelatedLocations(ISerializeLocation location);
 
-        SerializeInstruction Serialize(ISerializeLocation location, SerializedTranslation translation);
+        string GetUniqueName(ISerializeLocation location);
+
+        bool IsValid(ISerializeLocation location);
+
+        SerializeInstruction QuerySerializeInstructions(ISerializeLocation location, SerializedTranslation translation);
 
         #endregion
     }

@@ -1,4 +1,5 @@
 using System;
+using System.Xml;
 
 namespace Unclassified.TxEditor.Models
 {
@@ -17,6 +18,17 @@ namespace Unclassified.TxEditor.Models
         #region Properties
 
         public string Filename { get; }
+
+        #endregion
+
+        #region ISerializeLocation Members
+
+        public XmlDocument GetDocument()
+        {
+            var document = new XmlDocument();
+            document.Load(Filename);
+            return document;
+        }
 
         #endregion
     }

@@ -31,7 +31,6 @@ namespace Unclassified.TxEditor.ViewModels
 
 		#region Private data
 
-		private int fileVersion;
 		private string loadedFilePath;
 		private string loadedFilePrefix;
 		private int readonlyFilesCount;
@@ -78,7 +77,7 @@ namespace Unclassified.TxEditor.ViewModels
 		public Dictionary<string, TextKeyViewModel> TextKeys { get; private set; }
 		public HashSet<string> LoadedCultureNames { get; private set; }
 		public HashSet<string> DeletedCultureNames { get; private set; }
-		public TextKeyViewModel RootTextKey { get; private set; }
+		public RootKeyViewModel RootTextKey { get; private set; }
 		public ObservableHashSet<TextKeyViewModel> ProblemKeys { get; private set; }
 
 		public string ScanDirectory { get; set; }
@@ -488,91 +487,72 @@ namespace Unclassified.TxEditor.ViewModels
 			}
 		}
 
-		public void DoLoadFolder(string folder)
+        public void DoLoadFolder(string folder)
 		{
-			bool foundFiles = false;
-			string regex = @"^(.+?)(\.(([a-z]{2})([-][a-z]{2})?))?\.(txd|xml)$";
-			List<string> prefixes = new List<string>();
-			string prefix = null;
-			foreach (string fileName in Directory.GetFiles(folder))
-			{
-				Match m = Regex.Match(Path.GetFileName(fileName), regex, RegexOptions.IgnoreCase);
-				if (m.Success)
-				{
-					if (!foundFiles)
-					{
-						foundFiles = true;
-					}
-					prefix = m.Groups[1].Value;
-					if (!prefixes.Contains(prefix))
-					{
-						prefixes.Add(prefix);
-					}
-				}
-			}
-			if (prefixes.Count > 1)
-			{
-				prefixes.Sort();
-				var result = TaskDialog.Show(
-					owner: MainWindow.Instance,
-					title: "TxEditor",
-					mainInstruction: Tx.T("msg.load folder.multiple dictionaries in folder"),
-					content: Tx.T("msg.load folder.multiple dictionaries in folder.desc"),
-					radioButtons: prefixes.ToArray(),
-					customButtons: new string[] { Tx.T("task dialog.button.load"), Tx.T("task dialog.button.cancel") },
-					allowDialogCancellation: true);
-				if (result.CustomButtonResult != 0 ||
-					result.RadioButtonResult == null)
-				{
-					// Cancel or unset
-					return;
-				}
-				prefix = prefixes[result.RadioButtonResult.Value];
-			}
-			int fileCount = 0;
-			if (prefix != null)
-			{
-				foundFiles = false;
-				fileVersion = 0;
-				regex = @"(\.(([a-z]{2})([-][a-z]{2})?))?\.(txd|xml)$";
-				if (!string.IsNullOrEmpty(prefix))
-				{
-					regex = "^" + Regex.Escape(prefix) + regex;
-				}
-				foreach (string fileName in Directory.GetFiles(folder))
-				{
-					Match m = Regex.Match(Path.GetFileName(fileName), regex, RegexOptions.IgnoreCase);
-					if (m.Success)
-					{
-						if (!foundFiles)
-						{
-							foundFiles = true;
-							FileModified = false;   // Prevent another unsaved warning from OnNewFile
-							OnNewFile();
-						}
-						if (!LoadFromXmlFile(fileName))
-						{
-							break;
-						}
-						fileCount++;
-					}
-				}
-			}
-			if (foundFiles)
-			{
-				SortCulturesInTextKey(RootTextKey);
-				DeletedCultureNames.Clear();
-				ValidateTextKeysDelayed();
-				StatusText = Tx.T("statusbar.n files loaded", fileCount) + Tx.T("statusbar.n text keys defined", TextKeys.Count);
-				FileModified = false;
-				ClearViewHistory();
-				CheckNotifyReadonlyFiles();
-			}
-			else
-			{
-				App.WarningMessage(Tx.T("msg.load folder.no files found"));
-			}
-		}
+            var uniqueTranslations = SerializeProvider.Instance.GetUniqueTranslationsFromFolder(folder).ToArray();
+
+            var selectedTranslation = uniqueTranslations.FirstOrDefault();
+            if (uniqueTranslations.Length > 1)
+		    {
+                var result = TaskDialog.Show(
+                    owner: MainWindow.Instance,
+                    title: "TxEditor",
+                    mainInstruction: Tx.T("msg.load folder.multiple dictionaries in folder"),
+                    content: Tx.T("msg.load folder.multiple dictionaries in folder.desc"),
+                    radioButtons: uniqueTranslations.Select(t=>t.Name).ToArray(),
+                    customButtons: new string[] { Tx.T("task dialog.button.load"), Tx.T("task dialog.button.cancel") },
+                    allowDialogCancellation: true);
+                if (result.CustomButtonResult != 0 ||
+                    result.RadioButtonResult == null)
+                {
+                    // Cancel or unset
+                    return;
+                }
+                selectedTranslation = uniqueTranslations[result.RadioButtonResult.Value];
+            }
+
+            if (selectedTranslation == null)
+            {
+                App.WarningMessage(Tx.T("msg.load folder.no files found"));
+                return;
+            }
+
+		    foreach (var instruction in selectedTranslation.DeserializeInstructions)
+		    {
+		        var filename = ((FileLocation)instruction.Location).Filename;
+                try
+                {
+                    var translation = instruction.Deserialize();
+                    foreach (var culture in translation.Cultures)
+                    {
+                        ComposeKeys(culture.Name, culture.Keys);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    FL.Error("Error loading file", filename);
+                    FL.Error(ex, "Loading XML dictionary file");
+                    var result = TaskDialog.Show(
+                        owner: MainWindow.Instance,
+                        allowDialogCancellation: true,
+                        title: "TxEditor",
+                        mainIcon: VistaTaskDialogIcon.Error,
+                        mainInstruction: Tx.T("msg.load file.invalid file"),
+                        content: Tx.T("msg.load file.invalid file.desc", "name", filename, "msg", ex.Message),
+                        customButtons: new[] { Tx.T("task dialog.button.skip file"), Tx.T("task dialog.button.cancel") });
+
+                    if(result.CustomButtonResult == 1) break;
+                }
+            }
+
+            SortCulturesInTextKey(RootTextKey);
+            DeletedCultureNames.Clear();
+            ValidateTextKeysDelayed();
+            StatusText = Tx.T("statusbar.n files loaded", selectedTranslation.DeserializeInstructions.Length) + Tx.T("statusbar.n text keys defined", TextKeys.Count);
+            FileModified = false;
+            ClearViewHistory();
+            CheckNotifyReadonlyFiles();
+        }
 
 		private void OnLoadFile()
 		{
@@ -595,8 +575,8 @@ namespace Unclassified.TxEditor.ViewModels
 
 		public void DoLoadFiles(string[] fileNames)
 		{
-			// Check for same prefix and reject mixed files
-			List<string> prefixes = new List<string>();
+            // Check for same prefix and reject mixed files
+            var prefixes = new List<string>();
 			foreach (string fileName in fileNames)
 			{
 				string prefix = FileNameHelper.GetPrefix(fileName);
@@ -611,12 +591,11 @@ namespace Unclassified.TxEditor.ViewModels
 				return;
 			}
 
-			List<string> filesToLoad = new List<string>(fileNames);
+			var filesToLoad = new List<string>(fileNames);
 
 			if (!FileNameHelper.FindOtherCultures(filesToLoad)) return;
 
-			bool foundFiles = false;
-			fileVersion = 0;
+			var foundFiles = false;
 			string prevPrimaryCulture = null;
 			List<string> primaryCultureFiles = new List<string>();
 			foreach (string fileName in filesToLoad)
@@ -659,7 +638,8 @@ namespace Unclassified.TxEditor.ViewModels
 
 		private bool Save()
 		{
-			string newFilePath = null;
+		    var serializer = RootTextKey.Serializer;
+            string newFilePath = null;
 			string newFilePrefix = null;
 
 			if (loadedFilePath == null || loadedFilePrefix == null)
@@ -678,16 +658,14 @@ namespace Unclassified.TxEditor.ViewModels
 				{
 					newFilePath = Path.GetDirectoryName(dlg.FileName);
 					newFilePrefix = Path.GetFileNameWithoutExtension(dlg.FileName);
-					fileVersion = 2;
-					if (Path.GetExtension(dlg.FileName) == ".xml")
-						fileVersion = 1;
+					if (Path.GetExtension(dlg.FileName) == ".xml") serializer = SerializeProvider.Instance.Version1;
 				}
 				else
 				{
 					return false;
 				}
 			}
-			else if (fileVersion == 1)
+			else if (Equals(serializer, SerializeProvider.Instance.Version1))
 			{
 				// Saving existing format 1 file.
 				// Ask to upgrade to version 2 format.
@@ -708,7 +686,7 @@ namespace Unclassified.TxEditor.ViewModels
 					}
 					if (result.CustomButtonResult == 0)
 					{
-						fileVersion = 2;
+                        serializer = SerializeProvider.Instance.Version2;
 					}
 					if (result.VerificationChecked == true)
 					{
@@ -718,29 +696,26 @@ namespace Unclassified.TxEditor.ViewModels
 				}
 			}
 
-			if (fileVersion == 1)
+			if (Equals(serializer, SerializeProvider.Instance.Version1))
 			{
 				// Check for usage of version 2 features
-				bool foundIncompatibleFeatures = false;
+				var foundIncompatibleFeatures = false;
 				Action<TextKeyViewModel> checkTextKey = null;
-				checkTextKey = (vm) =>
+				checkTextKey = vm =>
 				{
 					foreach (var ct in vm.CultureTextVMs)
 					{
 						// Find modulo values and new placeholders {#} and {=...}
-						if (ct.Text != null && Regex.IsMatch(ct.Text, @"(?<!\{)\{(?:#\}|=)"))
-							foundIncompatibleFeatures = true;
+						if (ct.Text != null && Regex.IsMatch(ct.Text, @"(?<!\{)\{(?:#\}|=)")) foundIncompatibleFeatures = true;
 
 						foreach (var qt in ct.QuantifiedTextVMs)
 						{
-							if (qt.Modulo != 0)
-								foundIncompatibleFeatures = true;
-							if (qt.Text != null && Regex.IsMatch(qt.Text, @"(?<!\{)\{(?:#\}|=)"))
-								foundIncompatibleFeatures = true;
+							if (qt.Modulo != 0) foundIncompatibleFeatures = true;
+							if (qt.Text != null && Regex.IsMatch(qt.Text, @"(?<!\{)\{(?:#\}|=)")) foundIncompatibleFeatures = true;
 						}
 					}
 
-					foreach (TextKeyViewModel child in vm.Children)
+					foreach (var child in vm.Children.Enumerate<TextKeyViewModel>())
 					{
 						checkTextKey(child);
 					}
@@ -755,7 +730,7 @@ namespace Unclassified.TxEditor.ViewModels
 						title: "TxEditor",
 						mainInstruction: Tx.T("msg.save.incompatible with format 1"),
 						content: Tx.T("msg.save.incompatible with format 1.desc"),
-						customButtons: new string[] { Tx.T("task dialog.button.save anyway"), Tx.T("task dialog.button.dont save") });
+						customButtons: new[] { Tx.T("task dialog.button.save anyway"), Tx.T("task dialog.button.dont save") });
 
 					if (result.CustomButtonResult != 0)
 					{
@@ -766,15 +741,14 @@ namespace Unclassified.TxEditor.ViewModels
 
 			if (newFilePath != null)
 			{
-				if (!WriteToXmlFile(Path.Combine(newFilePath, newFilePrefix)))
+				if (!SaveToXmlFile(Path.Combine(newFilePath, newFilePrefix)))
 					return false;
 				loadedFilePath = newFilePath;
 				loadedFilePrefix = newFilePrefix;
 			}
 			else
 			{
-				if (!WriteToXmlFile(Path.Combine(loadedFilePath, loadedFilePrefix)))
-					return false;
+				if (!SaveToXmlFile(Path.Combine(loadedFilePath, loadedFilePrefix))) return false;
 			}
 			UpdateTitle();
 			StatusText = Tx.T("statusbar.file saved");
@@ -2170,7 +2144,11 @@ namespace Unclassified.TxEditor.ViewModels
             SerializedTranslation translation;
             try
             {
-                translation = SerializeProvider.Instance.LoadFromFile(fileName);
+                var location = new FileLocation(fileName);
+                var serializeProvider = SerializeProvider.Instance;
+
+                var serializer = serializeProvider.DetectSerializer(location);
+                translation = serializeProvider.LoadFrom(location, serializer).Deserialize();
             }
             catch (Exception ex)
             {
@@ -2213,7 +2191,7 @@ namespace Unclassified.TxEditor.ViewModels
                     }
                 }
 
-                LoadFromXml(culture.Name, culture.Keys);
+                ComposeKeys(culture.Name, culture.Keys);
             }
 
             return true;
@@ -2225,9 +2203,14 @@ namespace Unclassified.TxEditor.ViewModels
             if (fi.Exists && fi.IsReadOnly) SetReadonlyFiles();
 
             SerializedTranslation translation;
-            try
+	        IVersionSerializerDescription serializer;
+	        try
             {
-                translation = SerializeProvider.Instance.LoadFromFile(fileName);
+                var location = new FileLocation(fileName);
+                var serializeProvider = SerializeProvider.Instance;
+
+                serializer = serializeProvider.DetectSerializer(location);
+                translation = serializeProvider.LoadFrom(location, serializer).Deserialize();
             }
             catch (Exception ex)
             {
@@ -2263,16 +2246,18 @@ namespace Unclassified.TxEditor.ViewModels
             IsTemplateFile = translation.IsTemplate;
 
 
-            foreach (var culture in translation.Cultures)
+            foreach (var culture in translation.Cultures.Enumerate())
             {
-                LoadFromXml(culture.Name, culture.Keys);
+                ComposeKeys(culture.Name, culture.Keys);
             }
 
+	        RootTextKey.Serializer = serializer;
             PrimaryCulture = translation.Cultures.FirstOrDefault(c => c.IsPrimary)?.Name ?? PrimaryCulture;
+
             return true;
         }
 
-	    private void LoadFromXml(string cultureName, IEnumerable<SerializedKey> keys)
+	    private void ComposeKeys(string cultureName, IEnumerable<SerializedKey> keys)
 		{
             // Add the new culture everywhere
 	        if (!LoadedCultureNames.Contains(cultureName)) AddNewCulture(RootTextKey, cultureName, false);
@@ -2454,9 +2439,9 @@ namespace Unclassified.TxEditor.ViewModels
 		/// </summary>
 		/// <param name="fileNamePrefix">Path and file name prefix, without culture name and extension.</param>
 		/// <returns>true, if the file was saved successfully, false otherwise.</returns>
-		private bool WriteToXmlFile(string fileNamePrefix)
+		private bool SaveToXmlFile(string fileNamePrefix)
 		{
-			if (fileVersion == 1)
+			if (Equals(RootTextKey.Serializer, SerializeProvider.Instance.Version1))
 			{
 				// Check all files for read-only attribute
 				foreach (var cultureName in LoadedCultureNames.Union(DeletedCultureNames).Distinct())
@@ -2551,7 +2536,7 @@ namespace Unclassified.TxEditor.ViewModels
 				}
 				DeletedCultureNames.Clear();
 			}
-			else if (fileVersion == 2)
+			else if (Equals(RootTextKey.Serializer, SerializeProvider.Instance.Version2))
 			{
 				// Check file for read-only attribute
 				FileInfo fi = new FileInfo(fileNamePrefix + ".txd");
@@ -2656,7 +2641,7 @@ namespace Unclassified.TxEditor.ViewModels
 			}
 			else
 			{
-				App.ErrorMessage(Tx.T("msg.cannot save unsupported file version", "ver", fileVersion.ToString()));
+				App.ErrorMessage(Tx.T("msg.cannot save unsupported file version", "ver", RootTextKey.Serializer.Name));
 				return false;
 			}
 			FileModified = false;
@@ -2665,7 +2650,7 @@ namespace Unclassified.TxEditor.ViewModels
         
         
         /// <summary>
-		/// Writes all loaded text keys to a file.
+		/// Exports all loaded text keys to a file.
 		/// </summary>
 		/// <param name="fileNamePrefix">Path and file name prefix, without culture name and extension.</param>
 		/// <returns>true, if the file was saved successfully, false otherwise.</returns>
@@ -3109,7 +3094,12 @@ namespace Unclassified.TxEditor.ViewModels
                 return;
 		    }
 
-		    var translation = SerializeProvider.Instance.LoadFromEmbeddedResources(System.Reflection.Assembly.GetExecutingAssembly(), "Unclassified.TxEditor.Template.txd");
+            var location = new EmbeddedResourceLocation(System.Reflection.Assembly.GetExecutingAssembly(), "Unclassified.TxEditor.Template.txd");
+            var serializeProvider = SerializeProvider.Instance;
+
+            var serializer = serializeProvider.DetectSerializer(location);
+            var translation = serializeProvider.LoadFrom(location, serializer).Deserialize();
+
 		    var existingCulture = translation.Cultures.FirstOrDefault(c => c.Name == culture);
 		    if (existingCulture == null)
 		    {
@@ -3117,7 +3107,7 @@ namespace Unclassified.TxEditor.ViewModels
                 return;
 		    }
 
-		    LoadFromXml(culture, existingCulture.Keys);
+		    ComposeKeys(culture, existingCulture.Keys);
 
 		    FileModified = true;
 		    StatusText = Tx.T("statusbar.system keys added", "culture", culture);
@@ -3133,11 +3123,12 @@ namespace Unclassified.TxEditor.ViewModels
 		{
 			if (!string.IsNullOrEmpty(loadedFilePath))
 			{
-				DisplayName =
-					loadedFilePrefix +
-					(FileModified ? "*" : "") +
-					(fileVersion == 1 ? " (v1)" : "") +
-					" " + Tx.T("window.title.in path") + " " + loadedFilePath + " – TxEditor";
+                var builder = new StringBuilder();
+			    builder.Append(loadedFilePrefix);
+			    if (FileModified) builder.Append("*");
+			    builder.AppendFormat("({0})", RootTextKey.Serializer.Name);
+			    builder.Append(" " + Tx.T("window.title.in path") + " " + loadedFilePath + " – TxEditor");
+			    DisplayName = builder.ToString();
 			}
 			else
 			{

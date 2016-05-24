@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Xml;
+using Unclassified.TxEditor.Util;
 using Unclassified.Util;
 
 namespace Unclassified.TxEditor.Models.Versions
@@ -15,17 +16,11 @@ namespace Unclassified.TxEditor.Models.Versions
 
         public static string RecombineStringWithCultureName(string source, string culture)
         {
-            var extension = Path.GetExtension(source)?.ToLower() ?? string.Empty;
-            if (extension == ".txd" || extension == ".xml") source = source.Substring(0, source.Length - extension.Length);
-            else extension = string.Empty;
+            if (source == null) throw new ArgumentNullException(nameof(source));
+            if (culture == null) throw new ArgumentNullException(nameof(culture));
 
-            const string regexPattern = @"^(?<prefix>(.+?)\.)(?<culture>([a-z]{2})([-][a-z]{2})?)$";
-
-            var m = Regex.Match(source ?? string.Empty, regexPattern, RegexOptions.IgnoreCase);
-            if (!m.Success) return source + "." + culture + extension;
-
-            var sourcePrefix = m.Groups["prefix"].Value;
-            return sourcePrefix + culture + extension;
+            var parts = ParseString(source);
+            return parts.Item1 + "." + culture + "." + parts.Item3;
         }
 
         private static CultureInfo ParseLocationForCulture(ISerializeLocation location)
@@ -43,15 +38,24 @@ namespace Unclassified.TxEditor.Models.Versions
             return ci;
         }
 
+        private static Tuple<string, string, string> ParseString(string source)
+        {
+            var extension = Path.GetExtension(source)?.ToLower() ?? string.Empty;
+            if (extension == ".txd" || extension == ".xml") source = source.Substring(0, source.Length - extension.Length);
+            else extension = string.Empty;
+
+            const string regexPattern = @"^(?<prefix>(.+?))\.(?<culture>([a-z]{2})([-][a-z]{2})?)$";
+
+            var m = Regex.Match(source ?? string.Empty, regexPattern, RegexOptions.IgnoreCase);
+            if (!m.Success) return new Tuple<string, string, string>(source, null, extension);
+            return new Tuple<string, string, string>(m.Groups["prefix"].Value, m.Groups["culture"].Value, extension);
+        }
+
         private static CultureInfo ParseStringForCultureName(string name)
         {
-            const string regexPattern = @"(.+?)\.(([a-z]{2})([-][a-z]{2})?)\.(?:txd|xml)$";
-            var m = Regex.Match(name ?? string.Empty, regexPattern, RegexOptions.IgnoreCase);
-            if (!m.Success) return null;
-
-            var cultureName = m.Groups[2].Value;
-            var ci = CultureInfo.GetCultureInfo(cultureName);
-            return ci;
+            var parts = ParseString(name);
+            if (parts.Item2 == null) return null;
+            return CultureInfo.GetCultureInfo(parts.Item2);
         }
 
         #endregion
@@ -67,16 +71,51 @@ namespace Unclassified.TxEditor.Models.Versions
 
         #region IVersionSerializer Members
 
-        public SerializedTranslation Deserialize(ISerializeLocation location, XmlDocument document)
+        public ISerializeLocation[] GetRelatedLocations(ISerializeLocation location)
         {
             if (location == null) throw new ArgumentNullException(nameof(location));
-            if (document == null) throw new ArgumentNullException(nameof(document));
+            var fileLocation = location as FileLocation;
+            if (fileLocation != null)
+            {
+                var parts = ParseString(fileLocation.Filename);
+                if (parts.Item2 != null)
+                {
+                    return PathHelper.EnumerateFiles(parts.Item1 + ".*" + parts.Item3)
+                                     .Select(l => new FileLocation(l))
+                                     .Where(l => ParseLocationForCulture(l) != null)
+                                     .Where(IsValid)
+                                     .Cast<ISerializeLocation>()
+                                     .ToArray();
+                }
+            }
+
+            return new[] { location };
+        }
+
+        public string GetUniqueName(ISerializeLocation location)
+        {
+            string name = null;
+            var fileSource = location as FileLocation;
+            if (fileSource != null) name = fileSource.Filename;
+
+            var embeddedSource = location as EmbeddedResourceLocation;
+            if (embeddedSource != null) name = embeddedSource.Name;
+
+            if (string.IsNullOrEmpty(name)) return name;
+
+            return Path.GetFileName(ParseString(name).Item1);
+        }
+
+        public SerializedTranslation Deserialize(ISerializeLocation location)
+        {
+            if (location == null) throw new ArgumentNullException(nameof(location));
+
+            var document = location.GetDocument();
 
             var ci = ParseLocationForCulture(location);
             if (ci == null) throw new NotSupportedException("Version {0} does not support {1} location");
 
             var externalCultureName = ci.Name;
-
             if (string.IsNullOrEmpty(externalCultureName)) throw new InvalidDataException("external name is not set");
 
             return new SerializedTranslation
@@ -86,21 +125,20 @@ namespace Unclassified.TxEditor.Models.Versions
                 {
                     new SerializedCulture
                     {
-                        Keys = document.SelectNodes("text[@key]")
+                        Keys = document.DocumentElement?
+                                       .SelectNodes("text[@key]")
                                        .Enumerate<XmlElement>()
                                        .Select(DeserializeKey)
                                        .Where(k => k != null)
                                        .ToArray(),
                         IsPrimary = document.Attributes?["primary"]?.Value?.ToLower() == "true",
-                        Name = externalCultureName,
-                        XmlElement = null
+                        Name = externalCultureName
                     }
-                },
-                XmlElement = document.DocumentElement
+                }
             };
         }
 
-        public SerializeInstruction Serialize(ISerializeLocation location, SerializedTranslation translation)
+        public SerializeInstruction QuerySerializeInstructions(ISerializeLocation location, SerializedTranslation translation)
         {
             var fragments = new List<SerializeInstructionFragment>();
             foreach (var culture in translation.Cultures)
@@ -110,17 +148,25 @@ namespace Unclassified.TxEditor.Models.Versions
 
                 if (fileLocation == null) throw new NotSupportedException("Location {0} not supported");
 
-                fragments.Add(new SerializeInstructionFragment(SerializeTranslation(translation), fileLocation));
+                fragments.Add(new SerializeInstructionFragment(fileLocation, this, () => SerializeTranslation(translation)));
             }
 
             return new SerializeInstruction(fragments.ToArray());
         }
 
-        public bool IsValid(ISerializeLocation location, XmlDocument xmlDoc)
+        public bool IsValid(ISerializeLocation location)
         {
-            if (xmlDoc.DocumentElement?.Name != "translation") return false;
-            if (ParseLocationForCulture(location) == null) return false;
-            return xmlDoc.DocumentElement.SelectNodes("text[@key]").Enumerate<XmlNode>().Any();
+            try
+            {
+                var document = location.GetDocument();
+                if (document.DocumentElement?.Name != "translation") return false;
+                if (ParseLocationForCulture(location) == null) return false;
+                return document.DocumentElement.SelectNodes("text[@key]").Enumerate<XmlNode>().Any();
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         #endregion
@@ -162,8 +208,7 @@ namespace Unclassified.TxEditor.Models.Versions
                 Modulo = modulo,
                 AcceptMissing = textNode.Attributes["acceptmissing"]?.Value?.ToLower() == "true",
                 AcceptPlaceholders = textNode.Attributes["acceptplaceholders"]?.Value?.ToLower() == "true",
-                AcceptPunctuation = textNode.Attributes["acceptpunctuation"]?.Value?.ToLower() == "true",
-                XmlElement = textNode
+                AcceptPunctuation = textNode.Attributes["acceptpunctuation"]?.Value?.ToLower() == "true"
             };
         }
 

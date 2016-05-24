@@ -1,7 +1,7 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Reflection;
 using System.Text;
 using System.Xml;
 using Unclassified.TxEditor.Models.Versions;
@@ -48,31 +48,52 @@ namespace Unclassified.TxEditor.Models
 
         #region Members
 
-        public SerializedTranslation LoadFromEmbeddedResources(Assembly assembly, string resourceName)
+        public IVersionSerializer DetectSerializer(ISerializeLocation location)
         {
-            var templateStream = assembly.GetManifestResourceStream(resourceName);
-            if (templateStream == null)
-                throw new Exception("The template dictionary is not an embedded resource in this assembly. This is a build error.");
-
-            var document = new XmlDocument();
-            document.Load(templateStream);
-
-            var location = new EmbeddedResourceLocation(assembly, resourceName);
-            var version = DetectVersion(location, document);
-            if (version == null) throw new Exception("Unknown tx version");
-
-            return version.Deserialize(location, document);
+            return AvailableVersions.Enumerate<IVersionSerializer>().FirstOrDefault(r => r.IsValid(location));
         }
 
-        public SerializedTranslation LoadFromFile(string filename)
+        public IEnumerable<UniqueTranslation> GetUniqueTranslationsFromFolder(string folder)
         {
-            var document = new XmlDocument();
-            document.Load(filename);
-            var location = new FileLocation(filename);
-            var version = DetectVersion(location, document);
-            if (version == null) throw new Exception("Unknown tx version");
+            var processedFiles = new HashSet<string>();
+            foreach (var file in Util.PathHelper.EnumerateFiles(folder.TrimEnd('\\') + "\\"))
+            {
+                var localFile = file.ToLowerInvariant();
+                if (processedFiles.Contains(localFile)) continue;
 
-            return version.Deserialize(location, document);
+                var extension = Path.GetExtension(localFile).ToLowerInvariant();
+                if (string.IsNullOrEmpty(extension)) continue;
+                if (extension.EndsWith(".xml") || extension.EndsWith(".txd"))
+                {
+                    var location = new FileLocation(localFile);
+                    var serializer = DetectSerializer(location);
+                    if (serializer == null) continue;
+
+                    var instructions = serializer.GetRelatedLocations(location)
+                                                 .OfType<FileLocation>()
+                                                 .Select(fileLocation => new DeserializeInstruction(fileLocation, serializer))
+                                                 .ToArray();
+
+                    foreach (var instruction in instructions)
+                    {
+                        processedFiles.Add(((FileLocation)instruction.Location).Filename);
+                    }
+
+                    yield return new UniqueTranslation(serializer.GetUniqueName(location), instructions);
+                }
+            }
+        }
+
+        //public IEnumerable<FolderLocation> ScanFolderForUniqueSets(string folder)
+        //{
+
+        //}
+
+        public DeserializeInstruction LoadFrom(ISerializeLocation location, IVersionSerializerDescription serializerDescription = null)
+        {
+            var serializer = (serializerDescription ?? DetectSerializer(location)) as IVersionSerializer;
+            if (serializer == null) throw new NotSupportedException("Unknown serializer");
+            return new DeserializeInstruction(location, serializer);
         }
 
         public void SaveToFile(string filename, SerializedTranslation translation, IVersionSerializerDescription versionDescription)
@@ -83,7 +104,7 @@ namespace Unclassified.TxEditor.Models
             if (version == null) throw new ArgumentNullException(nameof(versionDescription));
 
             var baseLocation = new FileLocation(filename);
-            var serializedResult = version.Serialize(baseLocation, translation);
+            var serializedResult = version.QuerySerializeInstructions(baseLocation, translation);
 
             foreach (var instructionFragment in serializedResult.Fragments)
             {
@@ -98,17 +119,12 @@ namespace Unclassified.TxEditor.Models
 
                 using (XmlWriter xw = XmlWriter.Create(actualLocation.Filename + ".tmp", xws))
                 {
-                    instructionFragment.Document.Save(xw);
+                    instructionFragment.Serialize().Save(xw);
                 }
 
                 File.Delete(actualLocation.Filename);
                 File.Move(actualLocation.Filename + ".tmp", actualLocation.Filename);
             }
-        }
-
-        private IVersionSerializer DetectVersion(ISerializeLocation location, XmlDocument document)
-        {
-            return AvailableVersions.Enumerate<IVersionSerializer>().FirstOrDefault(r => r.IsValid(location, document));
         }
 
         #endregion

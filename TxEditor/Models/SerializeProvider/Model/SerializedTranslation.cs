@@ -1,6 +1,4 @@
-﻿using System.Xml;
-
-namespace Unclassified.TxEditor.Models
+﻿namespace Unclassified.TxEditor.Models
 {
     public class SerializedTranslation
     {
@@ -9,7 +7,17 @@ namespace Unclassified.TxEditor.Models
         public SerializedCulture[] Cultures { get; set; }
         public bool IsTemplate { get; set; }
 
-        public XmlElement XmlElement { get; set; }
+        #endregion
+
+        #region Members
+
+        public void Compose(SerializedTranslation translation)
+        {
+            foreach (var culture in translation.Cultures)
+            {
+            }
+        }
+
         #endregion
     }
 }

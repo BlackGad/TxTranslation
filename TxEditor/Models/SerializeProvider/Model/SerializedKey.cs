@@ -1,6 +1,4 @@
-﻿using System.Xml;
-
-namespace Unclassified.TxEditor.Models
+﻿namespace Unclassified.TxEditor.Models
 {
     public class SerializedKey
     {
@@ -15,7 +13,6 @@ namespace Unclassified.TxEditor.Models
         public int Modulo { get; set; }
         public string Text { get; set; }
 
-        public XmlElement XmlElement { get; set; }
         #endregion
     }
 }

@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Linq;
 using System.Xml;
 using Unclassified.Util;
@@ -18,33 +19,57 @@ namespace Unclassified.TxEditor.Models.Versions
 
         #region IVersionSerializer Members
 
-        public SerializeInstruction Serialize(ISerializeLocation location, SerializedTranslation translation)
+        public SerializeInstruction QuerySerializeInstructions(ISerializeLocation location, SerializedTranslation translation)
         {
-            return new SerializeInstruction(new SerializeInstructionFragment(SerializeTranslation(translation), location));
+            return new SerializeInstruction(new SerializeInstructionFragment(location, this, () => SerializeTranslation(translation)));
         }
 
-        public SerializedTranslation Deserialize(ISerializeLocation location, XmlDocument document)
+        public string GetUniqueName(ISerializeLocation location)
+        {
+            string name = null;
+            var fileSource = location as FileLocation;
+            if (fileSource != null) name = fileSource.Filename;
+
+            var embeddedSource = location as EmbeddedResourceLocation;
+            if (embeddedSource != null) name = embeddedSource.Name;
+
+            return Path.GetFileNameWithoutExtension(name);
+        }
+
+        public bool IsValid(ISerializeLocation location)
+        {
+            try
+            {
+                var document = location.GetDocument();
+                if (document.DocumentElement?.Name != "translation") return false;
+                return document.DocumentElement.SelectNodes("culture").Enumerate<XmlNode>().Any();
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        public ISerializeLocation[] GetRelatedLocations(ISerializeLocation location)
+        {
+            return new[] { location };
+        }
+
+        public SerializedTranslation Deserialize(ISerializeLocation location)
         {
             if (location == null) throw new ArgumentNullException(nameof(location));
-            if (document == null) throw new ArgumentNullException(nameof(document));
-            var result = new SerializedTranslation
+
+            var document = location.GetDocument();
+            return new SerializedTranslation
             {
                 IsTemplate = document.DocumentElement?.Attributes["template"]?.Value == "true",
-                Cultures = document.DocumentElement?.SelectNodes("culture")
+                Cultures = document.DocumentElement?
+                                   .SelectNodes("culture")
                                    .Enumerate<XmlElement>()
                                    .Select(DeserializedCulture)
                                    .Where(k => k != null)
-                                   .ToArray(),
-                XmlElement = document.DocumentElement
+                                   .ToArray()
             };
-
-            return result;
-        }
-
-        public bool IsValid(ISerializeLocation location, XmlDocument document)
-        {
-            if (document.DocumentElement?.Name != "translation") return false;
-            return document.DocumentElement.SelectNodes("culture").Enumerate<XmlNode>().Any();
         }
 
         #endregion
@@ -61,8 +86,7 @@ namespace Unclassified.TxEditor.Models.Versions
                                    .Where(k => k != null)
                                    .ToArray(),
                 IsPrimary = cultureNode?.Attributes["primary"]?.Value?.ToLower() == "true",
-                Name = cultureNode?.Attributes["name"]?.Value,
-                XmlElement = cultureNode
+                Name = cultureNode?.Attributes["name"]?.Value
             };
         }
 
@@ -101,8 +125,7 @@ namespace Unclassified.TxEditor.Models.Versions
                 Modulo = modulo,
                 AcceptMissing = textNode.Attributes["acceptmissing"]?.Value?.ToLower() == "true",
                 AcceptPlaceholders = textNode.Attributes["acceptplaceholders"]?.Value?.ToLower() == "true",
-                AcceptPunctuation = textNode.Attributes["acceptpunctuation"]?.Value?.ToLower() == "true",
-                XmlElement = textNode
+                AcceptPunctuation = textNode.Attributes["acceptpunctuation"]?.Value?.ToLower() == "true"
             };
         }
 

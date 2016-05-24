@@ -783,31 +783,37 @@ namespace Unclassified.TxEditor.ViewModels
 
 		private void OnImportFile()
 		{
-			var dlg = new OpenFileDialog();
-			dlg.CheckFileExists = true;
-			dlg.Filter = Tx.T("file filter.tx dictionary files") + " (*.txd)|*.txd|" +
-				Tx.T("file filter.xml files") + " (*.xml)|*.xml|" +
-				Tx.T("file filter.all files") + " (*.*)|*.*";
-			dlg.Multiselect = true;
-			dlg.ShowReadOnly = false;
-			dlg.Title = Tx.T("msg.import file.title");
-			if (dlg.ShowDialog(MainWindow.Instance) == true)
-			{
-				int count = 0;
-				foreach (string fileName in dlg.FileNames)
-				{
-					if (!LoadFromXmlFile(fileName, true))
-					{
-						break;
-					}
-					count++;
-				}
+		    var dlg = new OpenFileDialog
+		    {
+		        CheckFileExists = true,
+		        Filter = Tx.T("file filter.tx dictionary files") + " (*.txd)|*.txd|" +
+		                 Tx.T("file filter.xml files") + " (*.xml)|*.xml|" +
+		                 Tx.T("file filter.all files") + " (*.*)|*.*",
+		        Multiselect = true,
+		        ShowReadOnly = false,
+		        Title = Tx.T("msg.import file.title")
+		    };
+		    if (dlg.ShowDialog(MainWindow.Instance) != true) return;
 
-				SortCulturesInTextKey(RootTextKey);
-				ValidateTextKeysDelayed();
-				StatusText = Tx.T("statusbar.n files imported", count) + Tx.T("statusbar.n text keys defined", TextKeys.Count);
-				FileModified = true;
-			}
+		    var successfullyImportedFiles = dlg.FileNames.Where(fileName =>
+		    {
+		        try
+		        {
+		            return ImportFromXmlFile(fileName);
+		        }
+		        catch (Exception)
+		        {
+                    //Log import error
+                    return false;
+		        }
+		    }).ToArray();
+
+		    if (!successfullyImportedFiles.Any()) return;
+
+		    SortCulturesInTextKey(RootTextKey);
+		    ValidateTextKeysDelayed();
+		    StatusText = Tx.T("statusbar.n files imported", successfullyImportedFiles.Length) + Tx.T("statusbar.n text keys defined", TextKeys.Count);
+		    FileModified = true;
 		}
 
 		private bool CanExportKeys()
@@ -830,7 +836,7 @@ namespace Unclassified.TxEditor.ViewModels
 			{
 				string filePath = Path.GetDirectoryName(dlg.FileName);
 				string filePrefix = Path.GetFileNameWithoutExtension(dlg.FileName);
-				if (WriteToXmlFile(Path.Combine(filePath, filePrefix), true))
+				if (ExportToXmlFile(Path.Combine(filePath, filePrefix)))
 				{
 					StatusText = Tx.T("statusbar.exported");
 				}
@@ -845,22 +851,17 @@ namespace Unclassified.TxEditor.ViewModels
 		{
 			CultureWindow win = new CultureWindow();
 			win.Owner = MainWindow.Instance;
-			if (win.ShowDialog() == true)
-			{
-				CultureInfo ci = new CultureInfo(win.CodeText.Text);
-				AddNewCulture(RootTextKey, ci.IetfLanguageTag, true);
-				if (win.InsertSystemKeysCheckBox.IsChecked == true)
-				{
-					InsertSystemKeys(ci.Name);
-				}
-				// Make the very first culture the primary culture by default
-				if (LoadedCultureNames.Count == 1)
-				{
-					PrimaryCulture = ci.IetfLanguageTag;
-				}
-				FileModified = true;
-				StatusText = Tx.T("statusbar.culture added", "name", CultureInfoName(ci));
-			}
+		    if (win.ShowDialog() != true) return;
+
+		    var ci = new CultureInfo(win.CodeText.Text);
+		    AddNewCulture(RootTextKey, ci.IetfLanguageTag, true);
+		    if (win.InsertSystemKeysCheckBox.IsChecked == true) InsertSystemKeys(ci.Name);
+
+		    // Make the very first culture the primary culture by default
+		    if (LoadedCultureNames.Count == 1) PrimaryCulture = ci.IetfLanguageTag;
+
+		    FileModified = true;
+		    StatusText = Tx.T("statusbar.culture added", "name", CultureInfoName(ci));
 		}
 
 		private bool CanDeleteCulture()
@@ -1998,268 +1999,335 @@ namespace Unclassified.TxEditor.ViewModels
 			// CheckNotifyReadonlyFiles will be called with the InitCommand
 		}
 
-		private bool LoadFromXmlFile(string fileName, bool importing = false)
-		{
-			FileInfo fi = new FileInfo(fileName);
-			if (fi.Exists && fi.IsReadOnly && !importing)
-			{
-				SetReadonlyFiles();
-			}
+        //private bool LoadFromXmlFile(string fileName, bool importing = false)
+        //{
+        //	var fi = new FileInfo(fileName);
+        //    if (fi.Exists && fi.IsReadOnly && !importing) SetReadonlyFiles();
 
-			// First load the XML file into an XmlDocument for further processing
-			XmlDocument xmlDoc = new XmlDocument();
-			try
-			{
-				xmlDoc.Load(fileName);
-				if (xmlDoc.DocumentElement.Name != "translation")
-				{
-					throw new Exception("Unexpected XML root element.");
-				}
-				// After the file is valid XML and the root element has the expected name, no more
-				// major errors should occur. If this really is no Tx dictionary, no cultures and
-				// text keys should be found.
-			}
-			catch (Exception ex)
-			{
-				FL.Error("Error loading file", fileName);
-				FL.Error(ex, "Loading XML dictionary file");
-				var result = TaskDialog.Show(
-					owner: MainWindow.Instance,
-					allowDialogCancellation: true,
-					title: "TxEditor",
-					mainIcon: VistaTaskDialogIcon.Error,
-					mainInstruction: Tx.T("msg.load file.invalid file"),
-					content: Tx.T("msg.load file.invalid file.desc", "name", fileName, "msg", ex.Message),
-					customButtons: new string[] { Tx.T("task dialog.button.skip file"), Tx.T("task dialog.button.cancel") });
+        //    SerializedTranslation translation;
+        //	try
+        //	{
+        //              translation = SerializeProvider.Instance.LoadFromFile(fileName);
+        //          }
+        //	catch (Exception ex)
+        //	{
+        //		FL.Error("Error loading file", fileName);
+        //		FL.Error(ex, "Loading XML dictionary file");
+        //		var result = TaskDialog.Show(
+        //			owner: MainWindow.Instance,
+        //			allowDialogCancellation: true,
+        //			title: "TxEditor",
+        //			mainIcon: VistaTaskDialogIcon.Error,
+        //			mainInstruction: Tx.T("msg.load file.invalid file"),
+        //			content: Tx.T("msg.load file.invalid file.desc", "name", fileName, "msg", ex.Message),
+        //			customButtons: new[] { Tx.T("task dialog.button.skip file"), Tx.T("task dialog.button.cancel") });
 
-				if (result.CustomButtonResult == 0)
-				{
-					return true;
-				}
-				else
-				{
-					return false;
-				}
-			}
+        //		return result.CustomButtonResult == 0;
+        //	}
 
-			// Don't mix template and non-template files (not relevant when importing a file)
-			if (!importing)
-			{
-				var templateAttr = xmlDoc.DocumentElement.Attributes["template"];
-				bool fileIsTemplate = templateAttr != null && templateAttr.Value == "true";
-				if (fileIsTemplate && !IsTemplateFile && LoadedCultureNames.Count > 0 ||
-					!fileIsTemplate && IsTemplateFile)
-				{
-					FL.Warning("Trying to mix template and non-template files on loading");
-					var result = TaskDialog.Show(
-						owner: MainWindow.Instance,
-						allowDialogCancellation: true,
-						title: "TxEditor",
-						mainIcon: VistaTaskDialogIcon.Warning,
-						mainInstruction: Tx.T("msg.load file.mixed templates"),
-						content: Tx.T("msg.load file.mixed templates.desc", "name", fileName),
-						customButtons: new string[] { Tx.T("task dialog.button.skip file"), Tx.T("task dialog.button.cancel") });
+        //	// Don't mix template and non-template files (not relevant when importing a file)
+        //	if (!importing)
+        //	{
+        //		if (translation.IsTemplate && !IsTemplateFile && LoadedCultureNames.Count > 0 || !translation.IsTemplate && IsTemplateFile)
+        //		{
+        //			FL.Warning("Trying to mix template and non-template files on loading");
+        //			var result = TaskDialog.Show(
+        //				owner: MainWindow.Instance,
+        //				allowDialogCancellation: true,
+        //				title: "TxEditor",
+        //				mainIcon: VistaTaskDialogIcon.Warning,
+        //				mainInstruction: Tx.T("msg.load file.mixed templates"),
+        //				content: Tx.T("msg.load file.mixed templates.desc", "name", fileName),
+        //				customButtons: new[] { Tx.T("task dialog.button.skip file"), Tx.T("task dialog.button.cancel") });
 
-					if (result.CustomButtonResult == 0)
-					{
-						return true;
-					}
-					else
-					{
-						return false;
-					}
-				}
-				IsTemplateFile = fileIsTemplate;
-			}
+        //			return result.CustomButtonResult == 0;
+        //		}
+        //		IsTemplateFile = translation.IsTemplate;
+        //	}
 
-			// Try to recognise the culture name from the file name
-			Match m = Regex.Match(Path.GetFileName(fileName), @"^(.+?)\.(([a-z]{2})([-][a-z]{2})?)\.(?:txd|xml)$", RegexOptions.IgnoreCase);
-			if (m.Success)
-			{
-				CultureInfo ci = CultureInfo.GetCultureInfo(m.Groups[2].Value);
-				if (importing && !LoadedCultureNames.Contains(ci.Name))
-				{
-					var result = TaskDialog.Show(
-						owner: MainWindow.Instance,
-						allowDialogCancellation: true,
-						title: "TxEditor",
-						mainInstruction: Tx.T("msg.import file.add new culture", "culture", ci.Name),
-						content: Tx.T("msg.import file.add new culture.desc", "name", fileName, "culture", ci.Name),
-						customButtons: new string[] { Tx.T("task dialog.button.add culture"), Tx.T("task dialog.button.skip culture"), Tx.T("task dialog.button.cancel") });
+        //	// Try to recognize the culture name from the file name
+        //	var m = Regex.Match(Path.GetFileName(fileName), @"^(.+?)\.(([a-z]{2})([-][a-z]{2})?)\.(?:txd|xml)$", RegexOptions.IgnoreCase);
+        //	if (m.Success)
+        //	{
+        //		var ci = CultureInfo.GetCultureInfo(m.Groups[2].Value);
+        //		if (importing && !LoadedCultureNames.Contains(ci.Name))
+        //		{
+        //		    var result = TaskDialog.Show(
+        //				owner: MainWindow.Instance,
+        //				allowDialogCancellation: true,
+        //				title: "TxEditor",
+        //				mainInstruction: Tx.T("msg.import file.add new culture", "culture", ci.Name),
+        //				content: Tx.T("msg.import file.add new culture.desc", "name", fileName, "culture", ci.Name),
+        //				customButtons: new[] { Tx.T("task dialog.button.add culture"), Tx.T("task dialog.button.skip culture"), Tx.T("task dialog.button.cancel") });
 
-					if (result.CustomButtonResult == 0)
-					{
-					}
-					else if (result.CustomButtonResult == 1)
-					{
-						return true;
-					}
-					else
-					{
-						return false;
-					}
-				}
-				LoadFromXml(ci.Name, xmlDoc.DocumentElement);
+        //		    switch (result.CustomButtonResult)
+        //		    {
+        //		        case 0:
+        //		            break;
+        //		        case 1:
+        //		            return true;
+        //		        default:
+        //		            return false;
+        //		    }
+        //		}
 
-				if (!importing)
-				{
-					// Set the primary culture if a file claims to be it
-					XmlAttribute primaryAttr = xmlDoc.DocumentElement.Attributes["primary"];
-					if (primaryAttr != null && primaryAttr.Value == "true")
-					{
-						PrimaryCulture = ci.Name;
-						SortCulturesInTextKey(RootTextKey);
-					}
-					if (fileVersion == 0)
-					{
-						fileVersion = 1;
-						loadedFilePath = Path.GetDirectoryName(fileName);
-						loadedFilePrefix = m.Groups[1].Value;
-						UpdateTitle();
-					}
-				}
-				return true;
-			}
+        //	    LoadFromXml(ci.Name, xmlDoc.DocumentElement);
 
-			if (!importing)
-			{
-				// Find primary culture and set it already so that all loaded keys can be generated in
-				// the final order already
-				foreach (XmlElement xe in xmlDoc.DocumentElement.SelectNodes("culture[@primary='true']"))
-				{
-					PrimaryCulture = xe.Attributes["name"].Value;
-					break;
-				}
-			}
+        //	    if (importing) return true;
 
-			// Try to find the culture name inside a combined XML document
-			foreach (XmlElement xe in xmlDoc.DocumentElement.SelectNodes("culture[@name]"))
-			{
-				CultureInfo ci = CultureInfo.GetCultureInfo(xe.Attributes["name"].Value);
-				if (importing && !LoadedCultureNames.Contains(ci.Name))
-				{
-					if (importNewCultures == true)
-					{
-						// Continue with this culture
-					}
-					else if (importNewCultures == false)
-					{
-						// Continue with next culture
-						return true;
-					}
-					else
-					{
-						var result = TaskDialog.Show(
-							owner: MainWindow.Instance,
-							allowDialogCancellation: true,
-							title: "TxEditor",
-							mainInstruction: Tx.T("msg.import file.add new culture", "culture", ci.Name),
-							content: Tx.T("msg.import file.add new culture.desc", "name", fileName, "culture", ci.Name),
-							customButtons: new string[] { Tx.T("task dialog.button.add culture"), Tx.T("task dialog.button.skip culture"), Tx.T("task dialog.button.cancel") },
-							verificationText: Tx.T("msg.import file.add new culture.apply to all"));
+        //	    // Set the primary culture if a file claims to be it
+        //	    XmlAttribute primaryAttr = xmlDoc.DocumentElement.Attributes["primary"];
+        //	    if (primaryAttr != null && primaryAttr.Value == "true")
+        //	    {
+        //	        PrimaryCulture = ci.Name;
+        //	        SortCulturesInTextKey(RootTextKey);
+        //	    }
+        //	    if (fileVersion == 0)
+        //	    {
+        //	        fileVersion = 1;
+        //	        loadedFilePath = Path.GetDirectoryName(fileName);
+        //	        loadedFilePrefix = m.Groups[1].Value;
+        //	        UpdateTitle();
+        //	    }
+        //	    return true;
+        //	}
 
-						if (result.CustomButtonResult == 0)
-						{
-							if (result.VerificationChecked == true)
-							{
-								importNewCultures = true;
-							}
-							// Continue with this culture
-						}
-						else if (result.CustomButtonResult == 1)
-						{
-							if (result.VerificationChecked == true)
-							{
-								importNewCultures = false;
-							}
-							// Continue with next culture
-							return true;
-						}
-						else
-						{
-							// Cancel import
-							return false;
-						}
-					}
-				}
-				LoadFromXml(ci.Name, xe);
-			}
-			if (fileVersion == 0 && !importing)
-			{
-				fileVersion = 2;
-				loadedFilePath = Path.GetDirectoryName(fileName);
-				loadedFilePrefix = Path.GetFileNameWithoutExtension(fileName);
-				UpdateTitle();
-			}
-			return true;
-		}
+        //	if (!importing)
+        //	{
+        //		// Find primary culture and set it already so that all loaded keys can be generated in
+        //		// the final order already
+        //		foreach (XmlElement xe in xmlDoc.DocumentElement.SelectNodes("culture[@primary='true']"))
+        //		{
+        //			PrimaryCulture = xe.Attributes["name"].Value;
+        //			break;
+        //		}
+        //	}
 
-		private void LoadFromXml(string cultureName, XmlElement xe)
-		{
-		    // Add the new culture everywhere
-			if (!LoadedCultureNames.Contains(cultureName))
-			{
-				AddNewCulture(RootTextKey, cultureName, false);
-			}
+        //	// Try to find the culture name inside a combined XML document
+        //	foreach (XmlElement xe in xmlDoc.DocumentElement.SelectNodes("culture[@name]"))
+        //	{
+        //		var ci = CultureInfo.GetCultureInfo(xe.Attributes["name"].Value);
+        //		if (importing && !LoadedCultureNames.Contains(ci.Name))
+        //		{
+        //			if (importNewCultures == true)
+        //			{
+        //				// Continue with this culture
+        //			}
+        //			else if (importNewCultures == false)
+        //			{
+        //				// Continue with next culture
+        //				return true;
+        //			}
+        //			else
+        //			{
+        //				var result = TaskDialog.Show(
+        //					owner: MainWindow.Instance,
+        //					allowDialogCancellation: true,
+        //					title: "TxEditor",
+        //					mainInstruction: Tx.T("msg.import file.add new culture", "culture", ci.Name),
+        //					content: Tx.T("msg.import file.add new culture.desc", "name", fileName, "culture", ci.Name),
+        //					customButtons: new string[] { Tx.T("task dialog.button.add culture"), Tx.T("task dialog.button.skip culture"), Tx.T("task dialog.button.cancel") },
+        //					verificationText: Tx.T("msg.import file.add new culture.apply to all"));
 
-            // Read the XML document
-            foreach (XmlNode textNode in xe.SelectNodes("text[@key]"))
+        //				if (result.CustomButtonResult == 0)
+        //				{
+        //					if (result.VerificationChecked == true)
+        //					{
+        //						importNewCultures = true;
+        //					}
+        //					// Continue with this culture
+        //				}
+        //				else if (result.CustomButtonResult == 1)
+        //				{
+        //					if (result.VerificationChecked == true)
+        //					{
+        //						importNewCultures = false;
+        //					}
+        //					// Continue with next culture
+        //					return true;
+        //				}
+        //				else
+        //				{
+        //					// Cancel import
+        //					return false;
+        //				}
+        //			}
+        //		}
+        //		LoadFromXml(ci.Name, xe);
+        //	}
+
+        //    if (fileVersion != 0 || importing) return true;
+
+        //    fileVersion = 2;
+        //    loadedFilePath = Path.GetDirectoryName(fileName);
+        //    loadedFilePrefix = Path.GetFileNameWithoutExtension(fileName);
+        //    UpdateTitle();
+        //    return true;
+        //}
+
+        private bool ImportFromXmlFile(string fileName)
+        {
+            SerializedTranslation translation;
+            try
             {
-                var serialized = SerializeProvider.Instance.DeserializeKey(textNode);
-                if(serialized == null) continue;
+                translation = SerializeProvider.Instance.LoadFromFile(fileName);
+            }
+            catch (Exception ex)
+            {
+                FL.Error("Error loading file", fileName);
+                FL.Error(ex, "Loading XML dictionary file");
+                var result = TaskDialog.Show(
+                    owner: MainWindow.Instance,
+                    allowDialogCancellation: true,
+                    title: "TxEditor",
+                    mainIcon: VistaTaskDialogIcon.Error,
+                    mainInstruction: Tx.T("msg.load file.invalid file"),
+                    content: Tx.T("msg.load file.invalid file.desc", "name", fileName, "msg", ex.Message),
+                    customButtons: new[] { Tx.T("task dialog.button.skip file"), Tx.T("task dialog.button.cancel") });
 
-                string errorMessage;
-                if (!TextKeyViewModel.ValidateName(serialized.Key, out errorMessage))
+                return result.CustomButtonResult == 0;
+            }
+
+
+            foreach (var culture in translation.Cultures)
+            {
+                if (!LoadedCultureNames.Contains(culture.Name))
                 {
-                    //Log("Load XML: Invalid key: " + errorMessage + " Ignoring definition.");
-                    continue;
+                    var result = TaskDialog.Show(
+                        owner: MainWindow.Instance,
+                        allowDialogCancellation: true,
+                        title: "TxEditor",
+                        mainInstruction: Tx.T("msg.import file.add new culture", "culture", culture.Name),
+                        content: Tx.T("msg.import file.add new culture.desc", "name", fileName, "culture", culture.Name),
+                        customButtons:
+                            new[] { Tx.T("task dialog.button.add culture"), Tx.T("task dialog.button.skip culture"), Tx.T("task dialog.button.cancel") });
+
+                    switch (result.CustomButtonResult)
+                    {
+                        case 0:
+                            break;
+                        case 1:
+                            return true;
+                        default:
+                            return false;
+                    }
                 }
-                
+
+                LoadFromXml(culture.Name, culture.Keys);
+            }
+
+            return true;
+        }
+
+	    private bool LoadFromXmlFile(string fileName)
+        {
+            var fi = new FileInfo(fileName);
+            if (fi.Exists && fi.IsReadOnly) SetReadonlyFiles();
+
+            SerializedTranslation translation;
+            try
+            {
+                translation = SerializeProvider.Instance.LoadFromFile(fileName);
+            }
+            catch (Exception ex)
+            {
+                FL.Error("Error loading file", fileName);
+                FL.Error(ex, "Loading XML dictionary file");
+                var result = TaskDialog.Show(
+                    owner: MainWindow.Instance,
+                    allowDialogCancellation: true,
+                    title: "TxEditor",
+                    mainIcon: VistaTaskDialogIcon.Error,
+                    mainInstruction: Tx.T("msg.load file.invalid file"),
+                    content: Tx.T("msg.load file.invalid file.desc", "name", fileName, "msg", ex.Message),
+                    customButtons: new[] { Tx.T("task dialog.button.skip file"), Tx.T("task dialog.button.cancel") });
+
+                return result.CustomButtonResult == 0;
+            }
+
+            // Don't mix template and non-template files (not relevant when importing a file)
+            if (translation.IsTemplate && !IsTemplateFile && LoadedCultureNames.Count > 0 || !translation.IsTemplate && IsTemplateFile)
+            {
+                FL.Warning("Trying to mix template and non-template files on loading");
+                var result = TaskDialog.Show(
+                    owner: MainWindow.Instance,
+                    allowDialogCancellation: true,
+                    title: "TxEditor",
+                    mainIcon: VistaTaskDialogIcon.Warning,
+                    mainInstruction: Tx.T("msg.load file.mixed templates"),
+                    content: Tx.T("msg.load file.mixed templates.desc", "name", fileName),
+                    customButtons: new[] { Tx.T("task dialog.button.skip file"), Tx.T("task dialog.button.cancel") });
+
+                return result.CustomButtonResult == 0;
+            }
+            IsTemplateFile = translation.IsTemplate;
+
+
+            foreach (var culture in translation.Cultures)
+            {
+                LoadFromXml(culture.Name, culture.Keys);
+            }
+
+            PrimaryCulture = translation.Cultures.FirstOrDefault(c => c.IsPrimary)?.Name ?? PrimaryCulture;
+            return true;
+        }
+
+	    private void LoadFromXml(string cultureName, IEnumerable<SerializedKey> keys)
+		{
+            // Add the new culture everywhere
+	        if (!LoadedCultureNames.Contains(cultureName)) AddNewCulture(RootTextKey, cultureName, false);
+
+	        var validKeys = keys.Enumerate().Where(k =>
+		    {
+		        string errorMessage;
+		        return TextKeyViewModel.ValidateName(k.Key, out errorMessage);
+		    });
+
+		    foreach (var validKey in validKeys)
+		    {
                 // TODO: Catch exceptions NonNamespaceExistsException and NamespaceExistsException for invalid files
-                var tk = FindOrCreateTextKey(serialized.Key);
-				if (serialized.Comment != null) tk.Comment = serialized.Comment;
+                var tk = FindOrCreateTextKey(validKey.Key);
+                if (validKey.Comment != null) tk.Comment = validKey.Comment;
 
-				// Ensure that all loaded cultures exist in every text key so that they can be entered
-				foreach (string cn in LoadedCultureNames)
-				{
-					EnsureCultureInTextKey(tk, cn);
-				}
+                // Ensure that all loaded cultures exist in every text key so that they can be entered
+                foreach (string cn in LoadedCultureNames)
+                {
+                    EnsureCultureInTextKey(tk, cn);
+                }
 
-				tk.UpdateCultureTextSeparators();
+                tk.UpdateCultureTextSeparators();
 
-				// Find the current culture
-				var ct = tk.CultureTextVMs.First(vm => vm.CultureName == cultureName);
-				if (serialized.Count == -1)
-				{
-					// Default text, store it directly in the item
-					ct.Text = serialized.Text;
-					ct.AcceptMissing = serialized.AcceptMissing;
-					ct.AcceptPlaceholders = serialized.AcceptPlaceholders;
-					ct.AcceptPunctuation = serialized.AcceptPunctuation;
-				}
-				else
-				{
-					// Quantified text, go deeper
-					// Update existing entry or create and add a new one
-					var qt = ct.QuantifiedTextVMs.FirstOrDefault(q => q.Count == serialized.Count && q.Modulo == serialized.Modulo);
+                // Find the current culture
+                var ct = tk.CultureTextVMs.First(vm => vm.CultureName == cultureName);
+                if (validKey.Count == -1)
+                {
+                    // Default text, store it directly in the item
+                    ct.Text = validKey.Text;
+                    ct.AcceptMissing = validKey.AcceptMissing;
+                    ct.AcceptPlaceholders = validKey.AcceptPlaceholders;
+                    ct.AcceptPunctuation = validKey.AcceptPunctuation;
+                }
+                else
+                {
+                    // Quantified text, go deeper
+                    // Update existing entry or create and add a new one
+                    var qt = ct.QuantifiedTextVMs.FirstOrDefault(q => q.Count == validKey.Count && q.Modulo == validKey.Modulo);
 
-					var newQt = qt == null;
-					if (qt == null)
-					{
-						qt = new QuantifiedTextViewModel(ct);
-						qt.Count = serialized.Count;
-						qt.Modulo = serialized.Modulo;
-					}
-					qt.Text = serialized.Text;
-					qt.AcceptMissing = serialized.AcceptMissing;
-					qt.AcceptPlaceholders = serialized.AcceptPlaceholders;
-					qt.AcceptPunctuation = serialized.AcceptPunctuation;
-					if (newQt)
-					{
-						ct.QuantifiedTextVMs.InsertSorted(qt, (a, b) => QuantifiedTextViewModel.Compare(a, b));
-					}
-				}
-			}
+                    var newQt = qt == null;
+                    if (qt == null)
+                    {
+                        qt = new QuantifiedTextViewModel(ct);
+                        qt.Count = validKey.Count;
+                        qt.Modulo = validKey.Modulo;
+                    }
+                    qt.Text = validKey.Text;
+                    qt.AcceptMissing = validKey.AcceptMissing;
+                    qt.AcceptPlaceholders = validKey.AcceptPlaceholders;
+                    qt.AcceptPunctuation = validKey.AcceptPunctuation;
+                    if (newQt) ct.QuantifiedTextVMs.InsertSorted(qt, QuantifiedTextViewModel.Compare);
+                }
+            }
+            
 		}
 
 		/// <summary>
@@ -2386,9 +2454,9 @@ namespace Unclassified.TxEditor.ViewModels
 		/// </summary>
 		/// <param name="fileNamePrefix">Path and file name prefix, without culture name and extension.</param>
 		/// <returns>true, if the file was saved successfully, false otherwise.</returns>
-		private bool WriteToXmlFile(string fileNamePrefix, bool exporting = false)
+		private bool WriteToXmlFile(string fileNamePrefix)
 		{
-			if (fileVersion == 1 && !exporting)
+			if (fileVersion == 1)
 			{
 				// Check all files for read-only attribute
 				foreach (var cultureName in LoadedCultureNames.Union(DeletedCultureNames).Distinct())
@@ -2449,7 +2517,7 @@ namespace Unclassified.TxEditor.ViewModels
 						templateAttr.Value = "true";
 						xmlDoc.DocumentElement.Attributes.Append(templateAttr);
 					}
-					WriteToXml(cultureName, xmlDoc.DocumentElement, exporting);
+					WriteToXml(cultureName, xmlDoc.DocumentElement, false);
 
 					// Write xmlDoc to file
 					try
@@ -2483,7 +2551,7 @@ namespace Unclassified.TxEditor.ViewModels
 				}
 				DeletedCultureNames.Clear();
 			}
-			else if (fileVersion == 2 || exporting)
+			else if (fileVersion == 2)
 			{
 				// Check file for read-only attribute
 				FileInfo fi = new FileInfo(fileNamePrefix + ".txd");
@@ -2524,7 +2592,7 @@ namespace Unclassified.TxEditor.ViewModels
 				var spaceAttr = xmlDoc.CreateAttribute("xml:space");
 				spaceAttr.Value = "preserve";
 				xmlDoc.DocumentElement.Attributes.Append(spaceAttr);
-				if (IsTemplateFile && !exporting)
+				if (IsTemplateFile)
 				{
 					var templateAttr = xmlDoc.CreateAttribute("template");
 					templateAttr.Value = "true";
@@ -2544,7 +2612,7 @@ namespace Unclassified.TxEditor.ViewModels
 						primaryAttr.Value = "true";
 						cultureElement.Attributes.Append(primaryAttr);
 					}
-					WriteToXml(cultureName, cultureElement, exporting);
+					WriteToXml(cultureName, cultureElement, false);
 				}
 
 				// Write xmlDoc to file
@@ -2594,8 +2662,123 @@ namespace Unclassified.TxEditor.ViewModels
 			FileModified = false;
 			return true;
 		}
+        
+        
+        /// <summary>
+		/// Writes all loaded text keys to a file.
+		/// </summary>
+		/// <param name="fileNamePrefix">Path and file name prefix, without culture name and extension.</param>
+		/// <returns>true, if the file was saved successfully, false otherwise.</returns>
+		private bool ExportToXmlFile(string fileNamePrefix)
+        {
+            // Check file for read-only attribute
+            FileInfo fi = new FileInfo(fileNamePrefix + ".txd");
+            if (fi.Exists && fi.IsReadOnly)
+            {
+                App.ErrorMessage(Tx.T("msg.cannot write to read-only file"));
+                return false;
+            }
 
-		private void WriteXmlToFile(XmlDocument xmlDoc, string fileName)
+            // Delete previous backup and move current file to backup
+            bool haveBackup = false;
+            if (File.Exists(fileNamePrefix + ".txd"))
+            {
+                try
+                {
+                    File.Delete(fileNamePrefix + ".txd.bak");
+                }
+                catch (Exception ex)
+                {
+                    App.ErrorMessage(Tx.T("msg.cannot delete backup file", "name", fileNamePrefix + ".txd.bak"),
+                                     ex,
+                                     "Saving file, deleting old backup");
+                    return false;
+                }
+                try
+                {
+                    File.Move(fileNamePrefix + ".txd", fileNamePrefix + ".txd.bak");
+                    haveBackup = true;
+                }
+                catch (Exception ex)
+                {
+                    App.ErrorMessage(Tx.T("msg.cannot backup file.v2", "name", fileNamePrefix + ".txd"), ex, "Saving file, creating backup");
+                    return false;
+                }
+            }
+
+            XmlDocument xmlDoc = new XmlDocument();
+            xmlDoc.AppendChild(
+                xmlDoc.CreateComment(" TxTranslation dictionary file. Use TxEditor to edit this file. http://unclassified.software/txtranslation "));
+            xmlDoc.AppendChild(xmlDoc.CreateElement("translation"));
+            var spaceAttr = xmlDoc.CreateAttribute("xml:space");
+            spaceAttr.Value = "preserve";
+            xmlDoc.DocumentElement.Attributes.Append(spaceAttr);
+          
+
+            foreach (var cultureName in LoadedCultureNames.OrderBy(cn => cn))
+            {
+                var cultureElement = xmlDoc.CreateElement("culture");
+                xmlDoc.DocumentElement.AppendChild(cultureElement);
+                var nameAttr = xmlDoc.CreateAttribute("name");
+                nameAttr.Value = cultureName;
+                cultureElement.Attributes.Append(nameAttr);
+                if (cultureName == PrimaryCulture)
+                {
+                    var primaryAttr = xmlDoc.CreateAttribute("primary");
+                    primaryAttr.Value = "true";
+                    cultureElement.Attributes.Append(primaryAttr);
+                }
+                WriteToXml(cultureName, cultureElement, true);
+            }
+
+            // Write xmlDoc to file
+            try
+            {
+                WriteXmlToFile(xmlDoc, fileNamePrefix + ".txd");
+            }
+            catch (Exception ex)
+            {
+                // Try to restore the backup file
+                if (haveBackup)
+                {
+                    try
+                    {
+                        File.Delete(fileNamePrefix + ".txd");
+                        File.Move(fileNamePrefix + ".txd.bak", fileNamePrefix + ".txd");
+
+                        App.ErrorMessage(Tx.T("msg.cannot write file.v2 restored", "name", fileNamePrefix + ".txd"), ex, "Saving file");
+                    }
+                    catch (Exception ex2)
+                    {
+                        App.ErrorMessage(Tx.T("msg.cannot write file.v2", "name", fileNamePrefix + ".txd", "firstmsg", ex.Message),
+                                         ex2,
+                                         "Saving file, restoring backup");
+                    }
+                }
+                else
+                {
+                    App.ErrorMessage(Tx.T("msg.cannot write file.v2 no backup", "name", fileNamePrefix + ".txd"), ex, "Saving file");
+                }
+                return false;
+            }
+
+            // Delete backup file (could also be an option)
+            try
+            {
+                File.Delete(fileNamePrefix + ".txd.bak");
+            }
+            catch (Exception ex)
+            {
+                App.ErrorMessage(Tx.T("msg.cannot delete new backup file.v2", "name", fileNamePrefix + ".txd.bak"),
+                                 ex,
+                                 "Saving file, deleting new backup");
+            }
+        
+            FileModified = false;
+            return true;
+        }
+
+	    private void WriteXmlToFile(XmlDocument xmlDoc, string fileName)
 		{
 			XmlWriterSettings xws = new XmlWriterSettings();
 			xws.Encoding = Encoding.UTF8;
@@ -2920,40 +3103,29 @@ namespace Unclassified.TxEditor.ViewModels
 
 		private void InsertSystemKeys(string culture)
 		{
-			if (!string.IsNullOrEmpty(culture))
-			{
-				Stream templateStream = System.Reflection.Assembly.GetExecutingAssembly().GetManifestResourceStream("Unclassified.TxEditor.Template.txd");
-				if (templateStream == null)
-				{
-					throw new Exception("The template dictionary is not an embedded resource in this assembly. This is a build error.");
-				}
-				XmlDocument xmlDoc = new XmlDocument();
-				xmlDoc.Load(templateStream);
+		    if (string.IsNullOrEmpty(culture))
+		    {
+		        App.WarningMessage(Tx.T("msg.insert system keys.no culture selected"));
+                return;
+		    }
 
-				var xe = xmlDoc.DocumentElement.SelectSingleNode("culture[@name='" + culture + "']") as XmlElement;
-				if (xe != null)
-				{
-					LoadFromXml(culture, xe);
-					FileModified = true;
-					StatusText = Tx.T("statusbar.system keys added", "culture", culture);
+		    var translation = SerializeProvider.Instance.LoadFromEmbeddedResources(System.Reflection.Assembly.GetExecutingAssembly(), "Unclassified.TxEditor.Template.txd");
+		    var existingCulture = translation.Cultures.FirstOrDefault(c => c.Name == culture);
+		    if (existingCulture == null)
+		    {
+		        App.WarningMessage(Tx.T("msg.insert system keys.not available", "name", culture));
+                return;
+		    }
 
-					if (culture.Length == 5)
-					{
-						App.InformationMessage(Tx.T("msg.insert system keys.base culture", "name", culture.Substring(0, 2)));
-					}
-				}
-				else
-				{
-					App.WarningMessage(Tx.T("msg.insert system keys.not available", "name", culture));
-				}
-			}
-			else
-			{
-				App.WarningMessage(Tx.T("msg.insert system keys.no culture selected"));
-			}
+		    LoadFromXml(culture, existingCulture.Keys);
+
+		    FileModified = true;
+		    StatusText = Tx.T("statusbar.system keys added", "culture", culture);
+
+		    if (culture.Length == 5) App.InformationMessage(Tx.T("msg.insert system keys.base culture", "name", culture.Substring(0, 2)));
 		}
 
-		#endregion Culture management
+	    #endregion Culture management
 
 		#region Window management
 

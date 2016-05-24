@@ -1,4 +1,11 @@
-﻿using System.Xml;
+﻿using System;
+using System.IO;
+using System.Linq;
+using System.Reflection;
+using System.Text;
+using System.Xml;
+using Unclassified.TxEditor.Models.Versions;
+using Unclassified.Util;
 
 namespace Unclassified.TxEditor.Models
 {
@@ -19,49 +26,89 @@ namespace Unclassified.TxEditor.Models
 
         private SerializeProvider()
         {
+            Version1 = new Version1Serializer();
+            Version2 = new Version2Serializer();
+
+            AvailableVersions = new[]
+            {
+                Version1,
+                Version2
+            };
         }
+
+        #endregion
+
+        #region Properties
+
+        public IVersionSerializerDescription[] AvailableVersions { get; }
+        public IVersionSerializerDescription Version1 { get; }
+        public IVersionSerializerDescription Version2 { get; }
 
         #endregion
 
         #region Members
 
-        public SerializedKey DeserializeKey(XmlNode textNode)
+        public SerializedTranslation LoadFromEmbeddedResources(Assembly assembly, string resourceName)
         {
-            int count;
-            if (int.TryParse(textNode.Attributes?["count"]?.Value, out count))
-            {
-                if (count < 0 || count > ushort.MaxValue)
-                {
-                    // Count value out of range. Skip invalid entries
-                    //Log("Load XML: Count attribute value of key {0} is out of range. Ignoring definition.", key);
-                    return null;
-                }
-            }
-            else count = -1;
+            var templateStream = assembly.GetManifestResourceStream(resourceName);
+            if (templateStream == null)
+                throw new Exception("The template dictionary is not an embedded resource in this assembly. This is a build error.");
 
-            int modulo;
-            if (int.TryParse(textNode.Attributes?["mod"]?.Value, out modulo))
-            {
-                if (modulo < 2 || modulo > 1000)
-                {
-                    // Count value out of range. Skip invalid entries
-                    //Log("Load XML: Count attribute value of key {0} is out of range. Ignoring definition.", key);
-                    return null;
-                }
-            }
-            else modulo = 0;
+            var document = new XmlDocument();
+            document.Load(templateStream);
 
-            return new SerializedKey
+            var location = new EmbeddedResourceLocation(assembly, resourceName);
+            var version = DetectVersion(location, document);
+            if (version == null) throw new Exception("Unknown tx version");
+
+            return version.Deserialize(location, document);
+        }
+
+        public SerializedTranslation LoadFromFile(string filename)
+        {
+            var document = new XmlDocument();
+            document.Load(filename);
+            var location = new FileLocation(filename);
+            var version = DetectVersion(location, document);
+            if (version == null) throw new Exception("Unknown tx version");
+
+            return version.Deserialize(location, document);
+        }
+
+        public void SaveToFile(string filename, SerializedTranslation translation, IVersionSerializerDescription versionDescription)
+        {
+            if (filename == null) throw new ArgumentNullException(nameof(filename));
+            if (translation == null) throw new ArgumentNullException(nameof(translation));
+            var version = versionDescription as IVersionSerializer;
+            if (version == null) throw new ArgumentNullException(nameof(versionDescription));
+
+            var baseLocation = new FileLocation(filename);
+            var serializedResult = version.Serialize(baseLocation, translation);
+
+            foreach (var instructionFragment in serializedResult.Fragments)
             {
-                Key = textNode.Attributes?["key"]?.Value,
-                Text = textNode.InnerText,
-                Comment = textNode.Attributes?["comment"]?.Value,
-                Count = count,
-                Modulo = modulo,
-                AcceptMissing = textNode.Attributes?["acceptmissing"]?.Value?.ToLower() == "true",
-                AcceptPlaceholders = textNode.Attributes?["acceptplaceholders"]?.Value?.ToLower() == "true",
-                AcceptPunctuation = textNode.Attributes?["acceptpunctuation"]?.Value?.ToLower() == "true"
-            };
+                var actualLocation = instructionFragment.Location as FileLocation;
+                if (actualLocation == null) continue;
+
+                var xws = new XmlWriterSettings();
+                xws.Encoding = Encoding.UTF8;
+                xws.Indent = true;
+                xws.IndentChars = "\t";
+                xws.OmitXmlDeclaration = false;
+
+                using (XmlWriter xw = XmlWriter.Create(actualLocation.Filename + ".tmp", xws))
+                {
+                    instructionFragment.Document.Save(xw);
+                }
+
+                File.Delete(actualLocation.Filename);
+                File.Move(actualLocation.Filename + ".tmp", actualLocation.Filename);
+            }
+        }
+
+        private IVersionSerializer DetectVersion(ISerializeLocation location, XmlDocument document)
+        {
+            return AvailableVersions.Enumerate<IVersionSerializer>().FirstOrDefault(r => r.IsValid(location, document));
         }
 
         #endregion

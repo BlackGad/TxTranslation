@@ -1,4 +1,6 @@
-﻿namespace Unclassified.TxEditor.Models
+﻿using System.Xml;
+
+namespace Unclassified.TxEditor.Models
 {
     public class SerializedKey
     {
@@ -13,11 +15,7 @@
         public int Modulo { get; set; }
         public string Text { get; set; }
 
+        public XmlElement XmlElement { get; set; }
         #endregion
-    }
-
-    class SerializedCulture
-    {
-         
     }
 }

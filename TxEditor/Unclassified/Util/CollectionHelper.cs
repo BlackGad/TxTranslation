@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 
-namespace Unclassified.TxEditor.Unclassified.Util
+namespace Unclassified.Util
 {
     public static class CollectionHelper
     {

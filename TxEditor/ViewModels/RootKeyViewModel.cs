@@ -17,10 +17,25 @@ namespace Unclassified.TxEditor.ViewModels
 
         #region Properties
 
+        public string LoadedFilePath { get; set; }
+
+        public string LoadedFilePrefix { get; set; }
+
         public IVersionSerializerDescription Serializer
         {
             get { return _serializerDescription ?? SerializeProvider.Instance.Version2; }
             set { _serializerDescription = value; }
+        }
+
+        #endregion
+
+        #region Members
+
+        public void Reset()
+        {
+            Children.Clear();
+            LoadedFilePath = null;
+            LoadedFilePrefix = null;
         }
 
         #endregion

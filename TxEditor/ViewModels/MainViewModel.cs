@@ -31,8 +31,6 @@ namespace Unclassified.TxEditor.ViewModels
 
 		#region Private data
 
-		private string loadedFilePath;
-		private string loadedFilePrefix;
 		private int readonlyFilesCount;
 		private List<TextKeyViewModel> selectedTextKeys;
 		private List<TextKeyViewModel> viewHistory = new List<TextKeyViewModel>();
@@ -461,7 +459,8 @@ namespace Unclassified.TxEditor.ViewModels
 			if (!CheckModifiedSaved()) return;
 
 			if (!dateTimeWindow.IsClosed()) dateTimeWindow.Close();
-			RootTextKey.Children.Clear();
+            RootTextKey.Reset();
+            
 			TextKeys.Clear();
 			LoadedCultureNames.Clear();
 			DeletedCultureNames.Clear();
@@ -469,8 +468,6 @@ namespace Unclassified.TxEditor.ViewModels
 			IsTemplateFile = false;
 			ProblemKeys.Clear();
 			StatusText = Tx.T("statusbar.new dictionary created");
-			loadedFilePath = null;
-			loadedFilePrefix = null;
 			UpdateTitle();
 		}
 
@@ -642,19 +639,21 @@ namespace Unclassified.TxEditor.ViewModels
             string newFilePath = null;
 			string newFilePrefix = null;
 
-			if (loadedFilePath == null || loadedFilePrefix == null)
+			if (RootTextKey.LoadedFilePath == null || RootTextKey.LoadedFilePrefix == null)
 			{
 				// Ask for new file name and version
-				SaveFileDialog dlg = new SaveFileDialog();
-				dlg.AddExtension = true;
-				dlg.CheckPathExists = true;
-				dlg.DefaultExt = ".txd";
-				dlg.Filter = Tx.T("file filter.tx dictionary files") + " (*.txd)|*.txd|" +
-					Tx.T("file filter.xml files") + " (*.xml)|*.xml|" +
-					Tx.T("file filter.all files") + " (*.*)|*.*";
-				dlg.OverwritePrompt = true;
-				dlg.Title = Tx.T("msg.save.title");
-				if (dlg.ShowDialog(MainWindow.Instance) == true)
+			    var dlg = new SaveFileDialog
+			    {
+			        AddExtension = true,
+			        CheckPathExists = true,
+			        DefaultExt = ".txd",
+			        Filter = Tx.T("file filter.tx dictionary files") + " (*.txd)|*.txd|" +
+			                 Tx.T("file filter.xml files") + " (*.xml)|*.xml|" +
+			                 Tx.T("file filter.all files") + " (*.*)|*.*",
+			        OverwritePrompt = true,
+			        Title = Tx.T("msg.save.title")
+			    };
+			    if (dlg.ShowDialog(MainWindow.Instance) == true)
 				{
 					newFilePath = Path.GetDirectoryName(dlg.FileName);
 					newFilePrefix = Path.GetFileNameWithoutExtension(dlg.FileName);
@@ -741,14 +740,13 @@ namespace Unclassified.TxEditor.ViewModels
 
 			if (newFilePath != null)
 			{
-				if (!SaveToXmlFile(Path.Combine(newFilePath, newFilePrefix)))
-					return false;
-				loadedFilePath = newFilePath;
-				loadedFilePrefix = newFilePrefix;
+				if (!SaveToXmlFile(Path.Combine(newFilePath, newFilePrefix))) return false;
+				RootTextKey.LoadedFilePath = newFilePath;
+				RootTextKey.LoadedFilePrefix = newFilePrefix;
 			}
 			else
 			{
-				if (!SaveToXmlFile(Path.Combine(loadedFilePath, loadedFilePrefix))) return false;
+				if (!SaveToXmlFile(Path.Combine(RootTextKey.LoadedFilePath, RootTextKey.LoadedFilePrefix))) return false;
 			}
 			UpdateTitle();
 			StatusText = Tx.T("statusbar.file saved");
@@ -3121,13 +3119,13 @@ namespace Unclassified.TxEditor.ViewModels
 
 		private void UpdateTitle()
 		{
-			if (!string.IsNullOrEmpty(loadedFilePath))
+			if (!string.IsNullOrEmpty(RootTextKey.LoadedFilePath))
 			{
                 var builder = new StringBuilder();
-			    builder.Append(loadedFilePrefix);
+			    builder.Append(RootTextKey.LoadedFilePrefix);
 			    if (FileModified) builder.Append("*");
 			    builder.AppendFormat("({0})", RootTextKey.Serializer.Name);
-			    builder.Append(" " + Tx.T("window.title.in path") + " " + loadedFilePath + " – TxEditor");
+			    builder.Append(" " + Tx.T("window.title.in path") + " " + RootTextKey.LoadedFilePath + " – TxEditor");
 			    DisplayName = builder.ToString();
 			}
 			else

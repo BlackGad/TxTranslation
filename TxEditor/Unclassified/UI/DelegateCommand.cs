@@ -8,7 +8,7 @@ using System.Windows.Threading;
 namespace Unclassified.UI
 {
 	/// <summary>
-	/// Provides an <see cref="ICommand"/> implementation which relays the Execute and CanExecute
+	/// Provides an <see cref="ICommand"/> implementation which relays the Deserialize and CanExecute
 	/// method to the specified delegates.
 	/// </summary>
 	public class DelegateCommand : ICommand
@@ -48,7 +48,7 @@ namespace Unclassified.UI
 		/// <summary>
 		/// Initializes a new instance of the <see cref="DelegateCommand"/> class.
 		/// </summary>
-		/// <param name="execute">Delegate to execute when Execute is called on the command.</param>
+		/// <param name="execute">Delegate to execute when Deserialize is called on the command.</param>
 		/// <exception cref="ArgumentNullException">The execute argument must not be null.</exception>
 		public DelegateCommand(Action execute)
 			: this(execute, null)
@@ -58,7 +58,7 @@ namespace Unclassified.UI
 		/// <summary>
 		/// Initializes a new instance of the <see cref="DelegateCommand"/> class.
 		/// </summary>
-		/// <param name="execute">Delegate to execute when Execute is called on the command.</param>
+		/// <param name="execute">Delegate to execute when Deserialize is called on the command.</param>
 		/// <exception cref="ArgumentNullException">The execute argument must not be null.</exception>
 		public DelegateCommand(Action<object> execute)
 			: this(execute, null)
@@ -68,7 +68,7 @@ namespace Unclassified.UI
 		/// <summary>
 		/// Initializes a new instance of the <see cref="DelegateCommand"/> class.
 		/// </summary>
-		/// <param name="execute">Delegate to execute when Execute is called on the command.</param>
+		/// <param name="execute">Delegate to execute when Deserialize is called on the command.</param>
 		/// <param name="canExecute">Delegate to execute when CanExecute is called on the command.</param>
 		/// <exception cref="ArgumentNullException">The execute argument must not be null.</exception>
 		public DelegateCommand(Action execute, Func<bool> canExecute)
@@ -79,7 +79,7 @@ namespace Unclassified.UI
 		/// <summary>
 		/// Initializes a new instance of the <see cref="DelegateCommand"/> class.
 		/// </summary>
-		/// <param name="execute">Delegate to execute when Execute is called on the command.</param>
+		/// <param name="execute">Delegate to execute when Deserialize is called on the command.</param>
 		/// <param name="canExecute">Delegate to execute when CanExecute is called on the command.</param>
 		/// <exception cref="ArgumentNullException">The execute argument must not be null.</exception>
 		public DelegateCommand(Action<object> execute, Func<object, bool> canExecute)

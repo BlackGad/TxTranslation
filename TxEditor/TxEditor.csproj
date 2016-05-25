@@ -104,8 +104,7 @@
     <Compile Include="Models\SerializeProvider\Model\SerializedKey.cs" />
     <Compile Include="Models\SerializeProvider\Model\SerializedTranslation.cs" />
     <Compile Include="Models\SerializeProvider\SerializeInstruction.cs" />
-    <Compile Include="Models\SerializeProvider\SerializeInstructionFragment.cs" />
-    <Compile Include="Models\SerializeProvider\UniqueTranslation.cs" />
+    <Compile Include="Models\SerializeProvider\DetectedTranslation.cs" />
     <Compile Include="Models\SerializeProvider\Versions\Version1Serializer.cs" />
     <Compile Include="Models\SerializeProvider\Versions\Version2Serializer.cs" />
     <Compile Include="Program.cs" />

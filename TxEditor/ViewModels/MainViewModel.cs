@@ -486,7 +486,7 @@ namespace Unclassified.TxEditor.ViewModels
 
         public void DoLoadFolder(string folder)
 		{
-            var uniqueTranslations = SerializeProvider.Instance.GetUniqueTranslationsFromFolder(folder).ToArray();
+            var uniqueTranslations = SerializeProvider.Instance.DetectUniqueTranslations(folder).ToArray();
 
             var selectedTranslation = uniqueTranslations.FirstOrDefault();
             if (uniqueTranslations.Length > 1)
@@ -497,7 +497,7 @@ namespace Unclassified.TxEditor.ViewModels
                     mainInstruction: Tx.T("msg.load folder.multiple dictionaries in folder"),
                     content: Tx.T("msg.load folder.multiple dictionaries in folder.desc"),
                     radioButtons: uniqueTranslations.Select(t=>t.Name).ToArray(),
-                    customButtons: new string[] { Tx.T("task dialog.button.load"), Tx.T("task dialog.button.cancel") },
+                    customButtons: new[] { Tx.T("task dialog.button.load"), Tx.T("task dialog.button.cancel") },
                     allowDialogCancellation: true);
                 if (result.CustomButtonResult != 0 ||
                     result.RadioButtonResult == null)

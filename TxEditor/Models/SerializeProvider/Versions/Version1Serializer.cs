@@ -71,7 +71,7 @@ namespace Unclassified.TxEditor.Models.Versions
 
         #region IVersionSerializer Members
 
-        public ISerializeLocation[] GetRelatedLocations(ISerializeLocation location)
+        public ISerializeLocation[] DetectRelatedLocations(ISerializeLocation location)
         {
             if (location == null) throw new ArgumentNullException(nameof(location));
             var fileLocation = location as FileLocation;
@@ -92,7 +92,7 @@ namespace Unclassified.TxEditor.Models.Versions
             return new[] { location };
         }
 
-        public string GetUniqueName(ISerializeLocation location)
+        public string GetDisplayName(ISerializeLocation location)
         {
             string name = null;
             var fileSource = location as FileLocation;
@@ -106,11 +106,11 @@ namespace Unclassified.TxEditor.Models.Versions
             return Path.GetFileName(ParseString(name).Item1);
         }
 
-        public SerializedTranslation Deserialize(ISerializeLocation location)
+        public DeserializeInstruction Deserialize(ISerializeLocation location)
         {
             if (location == null) throw new ArgumentNullException(nameof(location));
 
-            var document = location.GetDocument();
+            var document = location.Load();
 
             var ci = ParseLocationForCulture(location);
             if (ci == null) throw new NotSupportedException("Version {0} does not support {1} location");
@@ -118,7 +118,7 @@ namespace Unclassified.TxEditor.Models.Versions
             var externalCultureName = ci.Name;
             if (string.IsNullOrEmpty(externalCultureName)) throw new InvalidDataException("external name is not set");
 
-            return new SerializedTranslation
+            Func<SerializedTranslation> deserializeFunc = () => new SerializedTranslation
             {
                 IsTemplate = document.DocumentElement?.Attributes["template"]?.Value == "true",
                 Cultures = new[]
@@ -136,29 +136,30 @@ namespace Unclassified.TxEditor.Models.Versions
                     }
                 }
             };
+            return new DeserializeInstruction(location, this, deserializeFunc);
         }
 
-        public SerializeInstruction QuerySerializeInstructions(ISerializeLocation location, SerializedTranslation translation)
-        {
-            var fragments = new List<SerializeInstructionFragment>();
-            foreach (var culture in translation.Cultures)
-            {
-                var fileLocation = location as FileLocation;
-                if (fileLocation != null) fileLocation = new FileLocation(RecombineStringWithCultureName(fileLocation.Filename, culture.Name));
+        //public SerializeInstruction QuerySerializeInstructions(ISerializeLocation location, SerializedTranslation translation)
+        //{
+        //    var fragments = new List<SerializeInstruction>();
+        //    foreach (var culture in translation.Cultures)
+        //    {
+        //        var fileLocation = location as FileLocation;
+        //        if (fileLocation != null) fileLocation = new FileLocation(RecombineStringWithCultureName(fileLocation.Filename, culture.Name));
 
-                if (fileLocation == null) throw new NotSupportedException("Location {0} not supported");
+        //        if (fileLocation == null) throw new NotSupportedException("Location {0} not supported");
 
-                fragments.Add(new SerializeInstructionFragment(fileLocation, this, () => SerializeTranslation(translation)));
-            }
+        //        fragments.Add(new SerializeInstruction(fileLocation, this, () => SerializeTranslation(translation)));
+        //    }
 
-            return new SerializeInstruction(fragments.ToArray());
-        }
+        //    return new SerializeInstruction(fragments.ToArray());
+        //}
 
         public bool IsValid(ISerializeLocation location)
         {
             try
             {
-                var document = location.GetDocument();
+                var document = location.Load();
                 if (document.DocumentElement?.Name != "translation") return false;
                 if (ParseLocationForCulture(location) == null) return false;
                 return document.DocumentElement.SelectNodes("text[@key]").Enumerate<XmlNode>().Any();
@@ -167,6 +168,29 @@ namespace Unclassified.TxEditor.Models.Versions
             {
                 return false;
             }
+        }
+
+        public SerializeInstruction[] Serialize(ISerializeLocation location, SerializedTranslation translation)
+        {
+            var result = new List<SerializeInstruction>();
+            foreach (var culture in translation.Cultures)
+            {
+                var fileLocation = location as FileLocation;
+                if (fileLocation != null) fileLocation = new FileLocation(RecombineStringWithCultureName(fileLocation.Filename, culture.Name));
+                if (fileLocation == null) throw new NotSupportedException("Location {0} not supported");
+
+                Action serializeAction = () =>
+                {
+                    var localTranslation = new SerializedTranslation();
+                    localTranslation.IsTemplate = translation.IsTemplate;
+                    localTranslation.Cultures = new[] { culture };
+                    fileLocation.Save(SerializeTranslation(translation));
+                };
+
+                result.Add(new SerializeInstruction(fileLocation, this, serializeAction));
+            }
+
+            return result.ToArray();
         }
 
         #endregion

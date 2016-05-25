@@ -2,11 +2,11 @@
 
 namespace Unclassified.TxEditor.Models
 {
-    public class UniqueTranslation
+    public class DetectedTranslation
     {
         #region Constructors
 
-        public UniqueTranslation(string name, DeserializeInstruction[] instructions)
+        public DetectedTranslation(string name, DeserializeInstruction[] instructions)
         {
             if (name == null) throw new ArgumentNullException(nameof(name));
             if (instructions == null) throw new ArgumentNullException(nameof(instructions));

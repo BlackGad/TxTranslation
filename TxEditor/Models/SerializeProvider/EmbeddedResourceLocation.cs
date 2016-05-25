@@ -26,7 +26,13 @@ namespace Unclassified.TxEditor.Models
 
         #region ISerializeLocation Members
 
-        public XmlDocument GetDocument()
+        public bool Exists()
+        {
+            var templateStream = Assembly.GetManifestResourceStream(Name);
+            return templateStream != null;
+        }
+
+        public XmlDocument Load()
         {
             var templateStream = Assembly.GetManifestResourceStream(Name);
             if (templateStream == null)
@@ -35,6 +41,11 @@ namespace Unclassified.TxEditor.Models
             var document = new XmlDocument();
             document.Load(templateStream);
             return document;
+        }
+
+        public void Save(XmlDocument document)
+        {
+            throw new NotSupportedException();
         }
 
         #endregion

@@ -2,9 +2,8 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Text;
-using System.Xml;
 using Unclassified.TxEditor.Models.Versions;
+using Unclassified.TxEditor.Util;
 using Unclassified.Util;
 
 namespace Unclassified.TxEditor.Models
@@ -48,15 +47,15 @@ namespace Unclassified.TxEditor.Models
 
         #region Members
 
-        public IVersionSerializer DetectSerializer(ISerializeLocation location)
+        public IVersionSerializerDescription DetectSerializer(ISerializeLocation location)
         {
             return AvailableVersions.Enumerate<IVersionSerializer>().FirstOrDefault(r => r.IsValid(location));
         }
 
-        public IEnumerable<UniqueTranslation> GetUniqueTranslationsFromFolder(string folder)
+        public IEnumerable<DetectedTranslation> DetectUniqueTranslations(string folder)
         {
             var processedFiles = new HashSet<string>();
-            foreach (var file in Util.PathHelper.EnumerateFiles(folder.TrimEnd('\\') + "\\"))
+            foreach (var file in PathHelper.EnumerateFiles(folder.TrimEnd('\\') + "\\"))
             {
                 var localFile = file.ToLowerInvariant();
                 if (processedFiles.Contains(localFile)) continue;
@@ -66,12 +65,12 @@ namespace Unclassified.TxEditor.Models
                 if (extension.EndsWith(".xml") || extension.EndsWith(".txd"))
                 {
                     var location = new FileLocation(localFile);
-                    var serializer = DetectSerializer(location);
+                    var serializer = (IVersionSerializer)DetectSerializer(location);
                     if (serializer == null) continue;
 
-                    var instructions = serializer.GetRelatedLocations(location)
+                    var instructions = serializer.DetectRelatedLocations(location)
                                                  .OfType<FileLocation>()
-                                                 .Select(fileLocation => new DeserializeInstruction(fileLocation, serializer))
+                                                 .Select(fileLocation => serializer.Deserialize(fileLocation))
                                                  .ToArray();
 
                     foreach (var instruction in instructions)
@@ -79,52 +78,28 @@ namespace Unclassified.TxEditor.Models
                         processedFiles.Add(((FileLocation)instruction.Location).Filename);
                     }
 
-                    yield return new UniqueTranslation(serializer.GetUniqueName(location), instructions);
+                    yield return new DetectedTranslation(serializer.GetDisplayName(location), instructions);
                 }
             }
         }
-
-        //public IEnumerable<FolderLocation> ScanFolderForUniqueSets(string folder)
-        //{
-
-        //}
 
         public DeserializeInstruction LoadFrom(ISerializeLocation location, IVersionSerializerDescription serializerDescription = null)
         {
             var serializer = (serializerDescription ?? DetectSerializer(location)) as IVersionSerializer;
             if (serializer == null) throw new NotSupportedException("Unknown serializer");
-            return new DeserializeInstruction(location, serializer);
+            return serializer.Deserialize(location);
         }
 
-        public void SaveToFile(string filename, SerializedTranslation translation, IVersionSerializerDescription versionDescription)
+        public SerializeInstruction[] SaveTo(SerializedTranslation translation,
+                                             ISerializeLocation location,
+                                             IVersionSerializerDescription serializerDescription)
         {
-            if (filename == null) throw new ArgumentNullException(nameof(filename));
             if (translation == null) throw new ArgumentNullException(nameof(translation));
-            var version = versionDescription as IVersionSerializer;
-            if (version == null) throw new ArgumentNullException(nameof(versionDescription));
+            if (location == null) throw new ArgumentNullException(nameof(location));
+            var serializer = serializerDescription as IVersionSerializer;
+            if (serializer == null) throw new NotSupportedException("Unknown serializer");
 
-            var baseLocation = new FileLocation(filename);
-            var serializedResult = version.QuerySerializeInstructions(baseLocation, translation);
-
-            foreach (var instructionFragment in serializedResult.Fragments)
-            {
-                var actualLocation = instructionFragment.Location as FileLocation;
-                if (actualLocation == null) continue;
-
-                var xws = new XmlWriterSettings();
-                xws.Encoding = Encoding.UTF8;
-                xws.Indent = true;
-                xws.IndentChars = "\t";
-                xws.OmitXmlDeclaration = false;
-
-                using (XmlWriter xw = XmlWriter.Create(actualLocation.Filename + ".tmp", xws))
-                {
-                    instructionFragment.Serialize().Save(xw);
-                }
-
-                File.Delete(actualLocation.Filename);
-                File.Move(actualLocation.Filename + ".tmp", actualLocation.Filename);
-            }
+            return serializer.Serialize(location, translation);
         }
 
         #endregion

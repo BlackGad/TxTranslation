@@ -19,12 +19,21 @@ namespace Unclassified.TxEditor.Models.Versions
 
         #region IVersionSerializer Members
 
-        public SerializeInstruction QuerySerializeInstructions(ISerializeLocation location, SerializedTranslation translation)
+        public SerializeInstruction[] Serialize(ISerializeLocation location, SerializedTranslation translation)
         {
-            return new SerializeInstruction(new SerializeInstructionFragment(location, this, () => SerializeTranslation(translation)));
+            Action serializeAction = () =>
+            {
+                var document = SerializeTranslation(translation);
+                location.Save(document);
+            };
+
+            return new[]
+            {
+                new SerializeInstruction(location, this, serializeAction)
+            };
         }
 
-        public string GetUniqueName(ISerializeLocation location)
+        public string GetDisplayName(ISerializeLocation location)
         {
             string name = null;
             var fileSource = location as FileLocation;
@@ -40,7 +49,7 @@ namespace Unclassified.TxEditor.Models.Versions
         {
             try
             {
-                var document = location.GetDocument();
+                var document = location.Load();
                 if (document.DocumentElement?.Name != "translation") return false;
                 return document.DocumentElement.SelectNodes("culture").Enumerate<XmlNode>().Any();
             }
@@ -50,17 +59,17 @@ namespace Unclassified.TxEditor.Models.Versions
             }
         }
 
-        public ISerializeLocation[] GetRelatedLocations(ISerializeLocation location)
+        public ISerializeLocation[] DetectRelatedLocations(ISerializeLocation location)
         {
             return new[] { location };
         }
 
-        public SerializedTranslation Deserialize(ISerializeLocation location)
+        public DeserializeInstruction Deserialize(ISerializeLocation location)
         {
             if (location == null) throw new ArgumentNullException(nameof(location));
 
-            var document = location.GetDocument();
-            return new SerializedTranslation
+            var document = location.Load();
+            Func<SerializedTranslation> deserializeFunc = () => new SerializedTranslation
             {
                 IsTemplate = document.DocumentElement?.Attributes["template"]?.Value == "true",
                 Cultures = document.DocumentElement?
@@ -70,6 +79,7 @@ namespace Unclassified.TxEditor.Models.Versions
                                    .Where(k => k != null)
                                    .ToArray()
             };
+            return new DeserializeInstruction(location, this, deserializeFunc);
         }
 
         #endregion

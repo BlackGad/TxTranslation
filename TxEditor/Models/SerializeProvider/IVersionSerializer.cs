@@ -4,15 +4,15 @@
     {
         #region Members
 
-        SerializedTranslation Deserialize(ISerializeLocation location);
+        DeserializeInstruction Deserialize(ISerializeLocation location);
 
-        ISerializeLocation[] GetRelatedLocations(ISerializeLocation location);
+        ISerializeLocation[] DetectRelatedLocations(ISerializeLocation location);
 
-        string GetUniqueName(ISerializeLocation location);
+        string GetDisplayName(ISerializeLocation location);
 
         bool IsValid(ISerializeLocation location);
 
-        SerializeInstruction QuerySerializeInstructions(ISerializeLocation location, SerializedTranslation translation);
+        SerializeInstruction[] Serialize(ISerializeLocation location, SerializedTranslation translation);
 
         #endregion
     }

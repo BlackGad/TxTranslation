@@ -6,7 +6,9 @@ namespace Unclassified.TxEditor.Models
     {
         #region Members
 
-        XmlDocument GetDocument();
+        bool Exists();
+        XmlDocument Load();
+        void Save(XmlDocument document);
 
         #endregion
     }

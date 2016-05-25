@@ -4,25 +4,37 @@ namespace Unclassified.TxEditor.Models
 {
     public class SerializeInstruction
     {
+        private readonly Action _serializeAction;
+
         #region Constructors
 
-        public SerializeInstruction(SerializeInstructionFragment fragment)
+        public SerializeInstruction(ISerializeLocation location, IVersionSerializerDescription descriptor, Action serializeAction)
         {
-            if (fragment == null) throw new ArgumentNullException(nameof(fragment));
-            Fragments = new[] { fragment };
-        }
+            if (location == null) throw new ArgumentNullException(nameof(location));
+            if (descriptor == null) throw new ArgumentNullException(nameof(descriptor));
+            if (serializeAction == null) throw new ArgumentNullException(nameof(serializeAction));
 
-        public SerializeInstruction(SerializeInstructionFragment[] fragments)
-        {
-            if (fragments == null) throw new ArgumentNullException(nameof(fragments));
-            Fragments = fragments;
+            _serializeAction = serializeAction;
+            Descriptor = descriptor;
+            Location = location;
         }
 
         #endregion
 
         #region Properties
 
-        public SerializeInstructionFragment[] Fragments { get; }
+        public IVersionSerializerDescription Descriptor { get; }
+
+        public ISerializeLocation Location { get; }
+
+        #endregion
+
+        #region Members
+
+        public void Serialize()
+        {
+            _serializeAction();
+        }
 
         #endregion
     }

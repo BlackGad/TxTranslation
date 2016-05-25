@@ -27,7 +27,7 @@ namespace Unclassified.TxEditor.Models
 
         #region ISerializeLocation Members
 
-        public XmlDocument GetDocument()
+        public XmlDocument Load()
         {
             throw new NotSupportedException();
         }

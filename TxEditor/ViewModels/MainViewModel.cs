@@ -104,6 +104,74 @@ namespace Unclassified.TxEditor.ViewModels
                 Cultures = cultures.Values.ToList()
             };
         }
+
+        /// <summary>
+	    ///     Writes all loaded text keys to a location.
+	    /// </summary>
+	    /// <param name="model">Source root model</param>
+	    /// <param name="location">Target location.</param>
+	    /// <returns>true, if the file was saved successfully, false otherwise.</returns>
+	    public static bool SaveTo(RootKeyViewModel model, ISerializeLocation location)
+        {
+            var translation = DumpTranslation(model);
+            var serializer = model.Serializer ?? SerializeProvider.Instance.Version2;
+            SerializeInstruction[] instructions;
+            try
+            {
+                instructions = SerializeProvider.Instance.SaveTo(translation, location, serializer);
+            }
+            catch
+            {
+                App.ErrorMessage(Tx.T("msg.cannot save unsupported file version", "ver", serializer.Name));
+                return false;
+            }
+
+            var hasObsoleteBackups = instructions.Where(i => i.Location.CanCleanBackup());
+            var failedObsoleteBackupCleaning = hasObsoleteBackups.BatchOperation(i => i.Location.CleanBackup());
+            foreach (var exception in failedObsoleteBackupCleaning)
+            {
+                App.ErrorMessage(string.Format("Cannot remove obsolete backup for \"{0}\".", exception.Instruction.Location), exception, "Saving file");
+                return false;
+            }
+
+            var willBeOverriden = instructions.Where(i => i.Location.CanLoad());
+            var failedBackup = willBeOverriden.BatchOperation(i => i.Location.Backup());
+            foreach (var exception in failedBackup)
+            {
+                App.ErrorMessage(string.Format("Cannot backup \"{0}\".", exception.Instruction.Location), exception, "Saving file");
+                return false;
+            }
+
+            var serialized = instructions.BatchOperation(i => i.Serialize()).ToList();
+
+            foreach (var exception in serialized)
+            {
+                //TODO: Show batch message
+                App.ErrorMessage(string.Format("Cannot serialize \"{0}\". Rolling back.", exception.Instruction.Location), exception, "Saving file");
+            }
+
+            if (serialized.Any())
+            {
+                var restoreRequired = instructions.Where(i => i.Location.CanRestore());
+                var failedRestore = restoreRequired.BatchOperation(i => i.Location.Restore()).ToList();
+                foreach (var exception in failedRestore)
+                {
+                    //TODO: Show batch message
+                    App.ErrorMessage(string.Format("Cannot restore \"{0}\".", exception.Instruction.Location), exception, "Saving file");
+                }
+            }
+
+            var hasBackups = instructions.Where(i => i.Location.CanCleanBackup());
+            var failedBackupCleaning = hasBackups.BatchOperation(i => i.Location.CleanBackup());
+            foreach (var exception in failedBackupCleaning)
+            {
+                //TODO: Show batch message
+                App.ErrorMessage(string.Format("Cannot remove backup for \"{0}\".", exception.Instruction.Location), exception, "Saving file");
+            }
+
+            return !serialized.Any();
+        }
+
         #endregion Static data
 
         #region Private data
@@ -817,12 +885,12 @@ namespace Unclassified.TxEditor.ViewModels
 		    RootTextKey.Serializer = serializer;
             if (newLocation != null)
 			{
-				if (!RootTextKey.SaveTo(newLocation)) return false;
+				if (!SaveTo(RootTextKey, newLocation)) return false;
 				RootTextKey.Location = newLocation;
 			}
 			else
 			{
-				if (!RootTextKey.SaveTo(RootTextKey.Location)) return false;
+				if (!SaveTo(RootTextKey, RootTextKey.Location)) return false;
 			}
 			UpdateTitle();
 			StatusText = Tx.T("statusbar.file saved");
@@ -2592,11 +2660,11 @@ namespace Unclassified.TxEditor.ViewModels
 			}
 		}
 
-		#endregion XML saving methods
+        #endregion XML saving methods
 
-		#region GetSystemTexts
+        #region GetSystemTexts
 
-		public Dictionary<string, Dictionary<string, Dictionary<int, string>>> GetSystemTexts()
+        public Dictionary<string, Dictionary<string, Dictionary<int, string>>> GetSystemTexts()
 		{
 			var languages = new Dictionary<string, Dictionary<string, Dictionary<int, string>>>();
 			foreach (var cultureName in LoadedCultureNames.OrderBy(cn => cn))

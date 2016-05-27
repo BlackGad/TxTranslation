@@ -289,6 +289,7 @@ namespace Unclassified.TxEditor.Models.Versions
         private XmlDocument SerializeTranslation(SerializedTranslation translation)
         {
             var document = new XmlDocument();
+            document.AppendChild(document.CreateComment(" TxTranslation dictionary file. Use TxEditor to edit this file. http://unclassified.software/txtranslation "));
             var translationElement = document.CreateElement("translation");
             document.AppendChild(translationElement);
             var spaceAttr = document.CreateAttribute("xml:space");

@@ -105,16 +105,16 @@ namespace Unclassified.TxEditor.ViewModels
             };
         }
 
-        /// <summary>
+	    /// <summary>
 	    ///     Writes all loaded text keys to a location.
 	    /// </summary>
-	    /// <param name="model">Source root model</param>
+	    /// <param name="serializer">Selected serializer.</param>
 	    /// <param name="location">Target location.</param>
+	    /// <param name="translation">Translation to save.</param>
 	    /// <returns>true, if the file was saved successfully, false otherwise.</returns>
-	    public static bool SaveTo(RootKeyViewModel model, ISerializeLocation location)
+	    public static bool SaveTo(SerializedTranslation translation, IVersionSerializerDescription serializer, ISerializeLocation location)
         {
-            var translation = DumpTranslation(model);
-            var serializer = model.Serializer ?? SerializeProvider.Instance.Version2;
+            serializer = serializer ?? SerializeProvider.Instance.Version2;
             SerializeInstruction[] instructions;
             try
             {
@@ -882,17 +882,15 @@ namespace Unclassified.TxEditor.ViewModels
 				}
 			}
 
-		    RootTextKey.Serializer = serializer;
-            if (newLocation != null)
-			{
-				if (!SaveTo(RootTextKey, newLocation)) return false;
-				RootTextKey.Location = newLocation;
-			}
-			else
-			{
-				if (!SaveTo(RootTextKey, RootTextKey.Location)) return false;
-			}
-			UpdateTitle();
+            var translation = DumpTranslation(RootTextKey);
+		    var location = newLocation ?? RootTextKey.Location;
+
+		    if (!SaveTo(translation, serializer, location)) return false;
+
+            RootTextKey.Serializer = serializer;
+            RootTextKey.Location = location;
+
+            UpdateTitle();
 			StatusText = Tx.T("statusbar.file saved");
 			return true;
 		}
@@ -940,22 +938,25 @@ namespace Unclassified.TxEditor.ViewModels
 		private void OnExportKeys()
 		{
 			// Ask for new file name and version
-			SaveFileDialog dlg = new SaveFileDialog();
-			dlg.AddExtension = true;
-			dlg.CheckPathExists = true;
-			dlg.DefaultExt = ".txd";
-			dlg.Filter = Tx.T("file filter.tx dictionary files") + " (*.txd)|*.txd|" +
-				Tx.T("file filter.all files") + " (*.*)|*.*";
-			dlg.OverwritePrompt = true;
-			dlg.Title = Tx.T("msg.export.title");
-			if (dlg.ShowDialog(MainWindow.Instance) == true)
+		    var dlg = new SaveFileDialog
+		    {
+		        AddExtension = true,
+		        CheckPathExists = true,
+		        DefaultExt = ".txd",
+		        Filter = Tx.T("file filter.tx dictionary files") + " (*.txd)|*.txd|" +
+		                 Tx.T("file filter.all files") + " (*.*)|*.*",
+		        OverwritePrompt = true,
+		        Title = Tx.T("msg.export.title")
+		    };
+
+		    if (dlg.ShowDialog(MainWindow.Instance) == true)
 			{
-				string filePath = Path.GetDirectoryName(dlg.FileName);
-				string filePrefix = Path.GetFileNameWithoutExtension(dlg.FileName);
-				if (ExportToXmlFile(Path.Combine(filePath, filePrefix)))
-				{
-					StatusText = Tx.T("statusbar.exported");
-				}
+                var serializer = RootTextKey.Serializer ?? SerializeProvider.Instance.Version2;
+
+                var translation = DumpTranslation(RootTextKey);
+			    translation.IsTemplate = false;
+
+			    if (SaveTo(translation, serializer, new FileLocation(dlg.FileName))) StatusText = Tx.T("statusbar.exported");
 			}
 		}
 
@@ -2406,262 +2407,6 @@ namespace Unclassified.TxEditor.ViewModels
 
         #endregion XML loading methods
 
-        #region XML saving methods
-        
-        /// <summary>
-		/// Exports all loaded text keys to a file.
-		/// </summary>
-		/// <param name="fileNamePrefix">Path and file name prefix, without culture name and extension.</param>
-		/// <returns>true, if the file was saved successfully, false otherwise.</returns>
-		private bool ExportToXmlFile(string fileNamePrefix)
-        {
-            // Check file for read-only attribute
-            FileInfo fi = new FileInfo(fileNamePrefix + ".txd");
-            if (fi.Exists && fi.IsReadOnly)
-            {
-                App.ErrorMessage(Tx.T("msg.cannot write to read-only file"));
-                return false;
-            }
-
-            // Delete previous backup and move current file to backup
-            bool haveBackup = false;
-            if (File.Exists(fileNamePrefix + ".txd"))
-            {
-                try
-                {
-                    File.Delete(fileNamePrefix + ".txd.bak");
-                }
-                catch (Exception ex)
-                {
-                    App.ErrorMessage(Tx.T("msg.cannot delete backup file", "name", fileNamePrefix + ".txd.bak"),
-                                     ex,
-                                     "Saving file, deleting old backup");
-                    return false;
-                }
-                try
-                {
-                    File.Move(fileNamePrefix + ".txd", fileNamePrefix + ".txd.bak");
-                    haveBackup = true;
-                }
-                catch (Exception ex)
-                {
-                    App.ErrorMessage(Tx.T("msg.cannot backup file.v2", "name", fileNamePrefix + ".txd"), ex, "Saving file, creating backup");
-                    return false;
-                }
-            }
-
-            XmlDocument xmlDoc = new XmlDocument();
-            xmlDoc.AppendChild(
-                xmlDoc.CreateComment(" TxTranslation dictionary file. Use TxEditor to edit this file. http://unclassified.software/txtranslation "));
-            xmlDoc.AppendChild(xmlDoc.CreateElement("translation"));
-            var spaceAttr = xmlDoc.CreateAttribute("xml:space");
-            spaceAttr.Value = "preserve";
-            xmlDoc.DocumentElement.Attributes.Append(spaceAttr);
-          
-
-            foreach (var cultureName in LoadedCultureNames.OrderBy(cn => cn))
-            {
-                var cultureElement = xmlDoc.CreateElement("culture");
-                xmlDoc.DocumentElement.AppendChild(cultureElement);
-                var nameAttr = xmlDoc.CreateAttribute("name");
-                nameAttr.Value = cultureName;
-                cultureElement.Attributes.Append(nameAttr);
-                if (cultureName == PrimaryCulture)
-                {
-                    var primaryAttr = xmlDoc.CreateAttribute("primary");
-                    primaryAttr.Value = "true";
-                    cultureElement.Attributes.Append(primaryAttr);
-                }
-                WriteToXml(cultureName, cultureElement, true);
-            }
-
-            // Write xmlDoc to file
-            try
-            {
-                WriteXmlToFile(xmlDoc, fileNamePrefix + ".txd");
-            }
-            catch (Exception ex)
-            {
-                // Try to restore the backup file
-                if (haveBackup)
-                {
-                    try
-                    {
-                        File.Delete(fileNamePrefix + ".txd");
-                        File.Move(fileNamePrefix + ".txd.bak", fileNamePrefix + ".txd");
-
-                        App.ErrorMessage(Tx.T("msg.cannot write file.v2 restored", "name", fileNamePrefix + ".txd"), ex, "Saving file");
-                    }
-                    catch (Exception ex2)
-                    {
-                        App.ErrorMessage(Tx.T("msg.cannot write file.v2", "name", fileNamePrefix + ".txd", "firstmsg", ex.Message),
-                                         ex2,
-                                         "Saving file, restoring backup");
-                    }
-                }
-                else
-                {
-                    App.ErrorMessage(Tx.T("msg.cannot write file.v2 no backup", "name", fileNamePrefix + ".txd"), ex, "Saving file");
-                }
-                return false;
-            }
-
-            // Delete backup file (could also be an option)
-            try
-            {
-                File.Delete(fileNamePrefix + ".txd.bak");
-            }
-            catch (Exception ex)
-            {
-                App.ErrorMessage(Tx.T("msg.cannot delete new backup file.v2", "name", fileNamePrefix + ".txd.bak"),
-                                 ex,
-                                 "Saving file, deleting new backup");
-            }
-        
-            FileModified = false;
-            return true;
-        }
-
-	    private void WriteXmlToFile(XmlDocument xmlDoc, string fileName)
-		{
-			XmlWriterSettings xws = new XmlWriterSettings();
-			xws.Encoding = Encoding.UTF8;
-			xws.Indent = true;
-			xws.IndentChars = "\t";
-			xws.OmitXmlDeclaration = false;
-			using (XmlWriter xw = XmlWriter.Create(fileName + ".tmp", xws))
-			{
-				xmlDoc.Save(xw);
-			}
-
-			File.Delete(fileName);
-			File.Move(fileName + ".tmp", fileName);
-		}
-
-		private void WriteToXml(string cultureName, XmlElement xe, bool exporting)
-		{
-			WriteTextKeysToXml(cultureName, xe, RootTextKey, exporting);
-		}
-
-		private void WriteTextKeysToXml(string cultureName, XmlElement xe, TextKeyViewModel textKeyVM, bool exporting)
-		{
-			if (textKeyVM.IsFullKey && textKeyVM.TextKey != null && (!exporting || textKeyVM.IsSelectedRecursive()))
-			{
-				var cultureTextVM = textKeyVM.CultureTextVMs.FirstOrDefault(vm => vm.CultureName == cultureName);
-				if (cultureTextVM != null)
-				{
-					if (!string.IsNullOrEmpty(cultureTextVM.Text) ||
-						textKeyVM.IsEmpty() && cultureName == PrimaryCulture && !textKeyVM.TextKey.StartsWith("Tx:") ||   // Save empty text keys in the primary culture at least (not for system keys)
-						cultureName == PrimaryCulture && !string.IsNullOrWhiteSpace(textKeyVM.Comment) ||   // Always keep comments in the primary culture
-						cultureTextVM.AcceptMissing || cultureTextVM.AcceptPlaceholders || cultureTextVM.AcceptPunctuation)   // Keep accept flags
-					{
-						var textElement = xe.OwnerDocument.CreateElement("text");
-						xe.AppendChild(textElement);
-						var keyAttr = xe.OwnerDocument.CreateAttribute("key");
-						keyAttr.Value = textKeyVM.TextKey;
-						textElement.Attributes.Append(keyAttr);
-						if (!string.IsNullOrEmpty(cultureTextVM.Text))
-						{
-							textElement.InnerText = cultureTextVM.Text;
-						}
-
-						if (cultureTextVM.AcceptMissing)
-						{
-							var acceptMissingAttr = xe.OwnerDocument.CreateAttribute("acceptmissing");
-							acceptMissingAttr.Value = "true";
-							textElement.Attributes.Append(acceptMissingAttr);
-						}
-						if (cultureTextVM.AcceptPlaceholders)
-						{
-							var acceptPlaceholdersAttr = xe.OwnerDocument.CreateAttribute("acceptplaceholders");
-							acceptPlaceholdersAttr.Value = "true";
-							textElement.Attributes.Append(acceptPlaceholdersAttr);
-						}
-						if (cultureTextVM.AcceptPunctuation)
-						{
-							var acceptPunctuationAttr = xe.OwnerDocument.CreateAttribute("acceptpunctuation");
-							acceptPunctuationAttr.Value = "true";
-							textElement.Attributes.Append(acceptPunctuationAttr);
-						}
-
-						// Add the text key comment to the primary culture
-						// (If no primary culture is set, the first-displayed is used to save the comments)
-						if (!string.IsNullOrWhiteSpace(textKeyVM.Comment))
-						{
-							if (PrimaryCulture != null && cultureName == PrimaryCulture ||
-								PrimaryCulture == null && cultureName == textKeyVM.CultureTextVMs[0].CultureName)
-							{
-								var commentAttr = xe.OwnerDocument.CreateAttribute("comment");
-								commentAttr.Value = textKeyVM.Comment;
-								textElement.Attributes.Append(commentAttr);
-							}
-						}
-					}
-					foreach (var quantifiedTextVM in cultureTextVM.QuantifiedTextVMs.OrderBy(qt => qt.Count).ThenBy(qt => qt.Modulo))
-					{
-						var textElement = xe.OwnerDocument.CreateElement("text");
-						xe.AppendChild(textElement);
-
-						var keyAttr = xe.OwnerDocument.CreateAttribute("key");
-						keyAttr.Value = textKeyVM.TextKey;
-						textElement.Attributes.Append(keyAttr);
-
-						if (quantifiedTextVM.Count < 0)
-						{
-							throw new Exception("Invalid count value " + quantifiedTextVM.Count + " set for text key " +
-								textKeyVM.TextKey + ", culture " + cultureName);
-						}
-						var countAttr = xe.OwnerDocument.CreateAttribute("count");
-						countAttr.Value = quantifiedTextVM.Count.ToString();
-						textElement.Attributes.Append(countAttr);
-
-						if (quantifiedTextVM.Modulo != 0 &&
-							(quantifiedTextVM.Modulo < 2 && quantifiedTextVM.Modulo > 1000))
-						{
-							throw new Exception("Invalid modulo value " + quantifiedTextVM.Modulo + " set for text key " +
-								textKeyVM.TextKey + ", culture " + cultureName + ", count " + quantifiedTextVM.Count);
-						}
-						if (quantifiedTextVM.Modulo > 1)
-						{
-							var modAttr = xe.OwnerDocument.CreateAttribute("mod");
-							modAttr.Value = quantifiedTextVM.Modulo.ToString();
-							textElement.Attributes.Append(modAttr);
-						}
-
-						if (quantifiedTextVM.AcceptMissing)
-						{
-							var acceptMissingAttr = xe.OwnerDocument.CreateAttribute("acceptmissing");
-							acceptMissingAttr.Value = "true";
-							textElement.Attributes.Append(acceptMissingAttr);
-						}
-						if (quantifiedTextVM.AcceptPlaceholders)
-						{
-							var acceptPlaceholdersAttr = xe.OwnerDocument.CreateAttribute("acceptplaceholders");
-							acceptPlaceholdersAttr.Value = "true";
-							textElement.Attributes.Append(acceptPlaceholdersAttr);
-						}
-						if (quantifiedTextVM.AcceptPunctuation)
-						{
-							var acceptPunctuationAttr = xe.OwnerDocument.CreateAttribute("acceptpunctuation");
-							acceptPunctuationAttr.Value = "true";
-							textElement.Attributes.Append(acceptPunctuationAttr);
-						}
-
-						if (!string.IsNullOrEmpty(quantifiedTextVM.Text))
-						{
-							textElement.InnerText = quantifiedTextVM.Text;
-						}
-					}
-				}
-			}
-			foreach (TextKeyViewModel child in textKeyVM.Children.OrderBy(tk => tk.DisplayName))
-			{
-				WriteTextKeysToXml(cultureName, xe, child, exporting);
-			}
-		}
-
-        #endregion XML saving methods
-
         #region GetSystemTexts
 
         public Dictionary<string, Dictionary<string, Dictionary<int, string>>> GetSystemTexts()
@@ -2676,68 +2421,68 @@ namespace Unclassified.TxEditor.ViewModels
 			return languages;
 		}
 
-		private void WriteToDictionary(string cultureName, Dictionary<string, Dictionary<int, string>> dict)
-		{
-			WriteTextKeysToDictionary(cultureName, dict, RootTextKey);
-		}
+        private void WriteToDictionary(string cultureName, Dictionary<string, Dictionary<int, string>> dict)
+        {
+            WriteTextKeysToDictionary(cultureName, dict, RootTextKey);
+        }
 
-		private void WriteTextKeysToDictionary(string cultureName, Dictionary<string, Dictionary<int, string>> dict, TextKeyViewModel textKeyVM)
-		{
-			if (textKeyVM.IsFullKey && textKeyVM.TextKey != null)
-			{
-				var cultureTextVM = textKeyVM.CultureTextVMs.FirstOrDefault(vm => vm.CultureName == cultureName);
-				if (cultureTextVM != null)
-				{
-					if (!string.IsNullOrEmpty(cultureTextVM.Text) && textKeyVM.TextKey.StartsWith("Tx:"))
-					{
-						if (!string.IsNullOrEmpty(cultureTextVM.Text))
-						{
-							if (!dict.ContainsKey(textKeyVM.TextKey))
-							{
-								dict[textKeyVM.TextKey] = new Dictionary<int, string>();
-							}
-							dict[textKeyVM.TextKey][-1] = cultureTextVM.Text;
-						}
-					}
-					foreach (var quantifiedTextVM in cultureTextVM.QuantifiedTextVMs.OrderBy(qt => qt.Count).ThenBy(qt => qt.Modulo))
-					{
-						if (quantifiedTextVM.Count < 0)
-						{
-							continue;
-						}
-						if (quantifiedTextVM.Modulo != 0 &&
-							(quantifiedTextVM.Modulo < 2 && quantifiedTextVM.Modulo > 1000))
-						{
-							continue;
-						}
-						if (!string.IsNullOrEmpty(quantifiedTextVM.Text))
-						{
-							int count = quantifiedTextVM.Count;
-							if (quantifiedTextVM.Modulo != 0)
-							{
-								// Encode the modulo value into the quantifier.
-								count = (quantifiedTextVM.Modulo << 16) | count;
-							}
-							if (!dict.ContainsKey(textKeyVM.TextKey))
-							{
-								dict[textKeyVM.TextKey] = new Dictionary<int, string>();
-							}
-							dict[textKeyVM.TextKey][count] = quantifiedTextVM.Text;
-						}
-					}
-				}
-			}
-			foreach (TextKeyViewModel child in textKeyVM.Children.OrderBy(tk => tk.DisplayName))
-			{
-				WriteTextKeysToDictionary(cultureName, dict, child);
-			}
-		}
+        private void WriteTextKeysToDictionary(string cultureName, Dictionary<string, Dictionary<int, string>> dict, TextKeyViewModel textKeyVM)
+        {
+            if (textKeyVM.IsFullKey && textKeyVM.TextKey != null)
+            {
+                var cultureTextVM = textKeyVM.CultureTextVMs.FirstOrDefault(vm => vm.CultureName == cultureName);
+                if (cultureTextVM != null)
+                {
+                    if (!string.IsNullOrEmpty(cultureTextVM.Text) && textKeyVM.TextKey.StartsWith("Tx:"))
+                    {
+                        if (!string.IsNullOrEmpty(cultureTextVM.Text))
+                        {
+                            if (!dict.ContainsKey(textKeyVM.TextKey))
+                            {
+                                dict[textKeyVM.TextKey] = new Dictionary<int, string>();
+                            }
+                            dict[textKeyVM.TextKey][-1] = cultureTextVM.Text;
+                        }
+                    }
+                    foreach (var quantifiedTextVM in cultureTextVM.QuantifiedTextVMs.OrderBy(qt => qt.Count).ThenBy(qt => qt.Modulo))
+                    {
+                        if (quantifiedTextVM.Count < 0)
+                        {
+                            continue;
+                        }
+                        if (quantifiedTextVM.Modulo != 0 &&
+                            (quantifiedTextVM.Modulo < 2 && quantifiedTextVM.Modulo > 1000))
+                        {
+                            continue;
+                        }
+                        if (!string.IsNullOrEmpty(quantifiedTextVM.Text))
+                        {
+                            int count = quantifiedTextVM.Count;
+                            if (quantifiedTextVM.Modulo != 0)
+                            {
+                                // Encode the modulo value into the quantifier.
+                                count = (quantifiedTextVM.Modulo << 16) | count;
+                            }
+                            if (!dict.ContainsKey(textKeyVM.TextKey))
+                            {
+                                dict[textKeyVM.TextKey] = new Dictionary<int, string>();
+                            }
+                            dict[textKeyVM.TextKey][count] = quantifiedTextVM.Text;
+                        }
+                    }
+                }
+            }
+            foreach (TextKeyViewModel child in textKeyVM.Children.OrderBy(tk => tk.DisplayName))
+            {
+                WriteTextKeysToDictionary(cultureName, dict, child);
+            }
+        }
 
-		#endregion GetSystemTexts
+        #endregion GetSystemTexts
 
-		#region Text validation
+        #region Text validation
 
-		private DelayedCall validateDc;
+        private DelayedCall validateDc;
 
 		/// <summary>
 		/// Validates all text keys and updates the suggestions later.

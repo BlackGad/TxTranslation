@@ -182,7 +182,6 @@ namespace Unclassified.TxEditor.ViewModels
 		private int viewHistoryIndex;
 		private OpFlag navigatingHistory = new OpFlag();
 		private DateTimeWindow dateTimeWindow;
-		private bool? importNewCultures;
 
 		#endregion Private data
 
@@ -2081,7 +2080,6 @@ namespace Unclassified.TxEditor.ViewModels
 			ClearReadonlyFiles();
 			string prevPrimaryCulture = null;
 			List<string> primaryCultureFiles = new List<string>();
-			importNewCultures = null;
 			foreach (string _fileName in fileNames.Distinct())
 			{
 				var fileName = _fileName;
@@ -2093,7 +2091,6 @@ namespace Unclassified.TxEditor.ViewModels
 
 			    prevPrimaryCulture = PrimaryCulture;
 			}
-			importNewCultures = null;
 			if (primaryCultureFiles.Count > 1)
 			{
 				// Display a warning if multiple (and which) files claimed to be the primary culture, and which has won

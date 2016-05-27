@@ -7,5 +7,11 @@
         string Name { get; }
 
         #endregion
+
+        #region Members
+
+        ISerializeDescription DescribeLocation(ISerializeLocation location);
+
+        #endregion
     }
 }

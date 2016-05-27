@@ -20,7 +20,7 @@ namespace Unclassified.TxEditor.Models.Versions
             if (culture == null) throw new ArgumentNullException(nameof(culture));
 
             var parts = ParseString(source);
-            return parts.Item1 + "." + culture + "." + parts.Item3;
+            return parts.Item1 + "." + culture + parts.Item3;
         }
 
         private static CultureInfo ParseLocationForCulture(ISerializeLocation location)
@@ -92,18 +92,26 @@ namespace Unclassified.TxEditor.Models.Versions
             return new[] { location };
         }
 
-        public string GetDisplayName(ISerializeLocation location)
+        public ISerializeDescription DescribeLocation(ISerializeLocation location)
         {
             string name = null;
+            string shortName = null;
             var fileSource = location as FileLocation;
-            if (fileSource != null) name = fileSource.Filename;
+            if (fileSource != null)
+            {
+                var parsedString = ParseString(fileSource.Filename);
+                name = parsedString.Item1;
+                shortName = Path.GetFileName(parsedString.Item1);
+            }
 
             var embeddedSource = location as EmbeddedResourceLocation;
-            if (embeddedSource != null) name = embeddedSource.Name;
+            if (embeddedSource != null)
+            {
+                name = embeddedSource.ToString();
+                shortName = ParseString(embeddedSource.Name).Item1;
+            }
 
-            if (string.IsNullOrEmpty(name)) return name;
-
-            return Path.GetFileName(ParseString(name).Item1);
+            return new SerializeDescription(name, shortName);
         }
 
         public DeserializeInstruction Deserialize(ISerializeLocation location)
@@ -130,30 +138,14 @@ namespace Unclassified.TxEditor.Models.Versions
                                        .Enumerate<XmlElement>()
                                        .Select(DeserializeKey)
                                        .Where(k => k != null)
-                                       .ToArray(),
+                                       .ToList(),
                         IsPrimary = document.Attributes?["primary"]?.Value?.ToLower() == "true",
                         Name = externalCultureName
                     }
-                }
+                }.ToList()
             };
             return new DeserializeInstruction(location, this, deserializeFunc);
         }
-
-        //public SerializeInstruction QuerySerializeInstructions(ISerializeLocation location, SerializedTranslation translation)
-        //{
-        //    var fragments = new List<SerializeInstruction>();
-        //    foreach (var culture in translation.Cultures)
-        //    {
-        //        var fileLocation = location as FileLocation;
-        //        if (fileLocation != null) fileLocation = new FileLocation(RecombineStringWithCultureName(fileLocation.Filename, culture.Name));
-
-        //        if (fileLocation == null) throw new NotSupportedException("Location {0} not supported");
-
-        //        fragments.Add(new SerializeInstruction(fileLocation, this, () => SerializeTranslation(translation)));
-        //    }
-
-        //    return new SerializeInstruction(fragments.ToArray());
-        //}
 
         public bool IsValid(ISerializeLocation location)
         {
@@ -181,12 +173,13 @@ namespace Unclassified.TxEditor.Models.Versions
 
                 Action serializeAction = () =>
                 {
-                    var localTranslation = new SerializedTranslation();
-                    localTranslation.IsTemplate = translation.IsTemplate;
-                    localTranslation.Cultures = new[] { culture };
-                    fileLocation.Save(SerializeTranslation(translation));
+                    var cultureTranslation = new SerializedTranslation
+                    {
+                        IsTemplate = translation.IsTemplate,
+                        Cultures = new []{culture}.ToList()
+                    };
+                    fileLocation.Save(SerializeTranslation(cultureTranslation));
                 };
-
                 result.Add(new SerializeInstruction(fileLocation, this, serializeAction));
             }
 
@@ -275,9 +268,12 @@ namespace Unclassified.TxEditor.Models.Versions
                 textElement.Attributes.Append(commentAttr);
             }
 
-            var countAttr = document.CreateAttribute("count");
-            countAttr.Value = key.Count.ToString();
-            textElement.Attributes.Append(countAttr);
+            if (key.Count > -1)
+            {
+                var countAttr = document.CreateAttribute("count");
+                countAttr.Value = key.Count.ToString();
+                textElement.Attributes.Append(countAttr);
+            }
 
             if (key.Modulo != 0 && key.Modulo < 2 && key.Modulo > 1000)
                 throw new Exception("Invalid modulo value " + key.Modulo + " set for text key " + key.Key + ", count " + key.Count);

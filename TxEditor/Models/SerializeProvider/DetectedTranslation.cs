@@ -6,11 +6,11 @@ namespace Unclassified.TxEditor.Models
     {
         #region Constructors
 
-        public DetectedTranslation(string name, DeserializeInstruction[] instructions)
+        public DetectedTranslation(ISerializeDescription description, DeserializeInstruction[] instructions)
         {
-            if (name == null) throw new ArgumentNullException(nameof(name));
+            if (description == null) throw new ArgumentNullException(nameof(description));
             if (instructions == null) throw new ArgumentNullException(nameof(instructions));
-            Name = name;
+            Description = description;
             DeserializeInstructions = instructions;
         }
 
@@ -18,8 +18,9 @@ namespace Unclassified.TxEditor.Models
 
         #region Properties
 
+        public ISerializeDescription Description { get; }
+
         public DeserializeInstruction[] DeserializeInstructions { get; }
-        public string Name { get; }
 
         #endregion
     }

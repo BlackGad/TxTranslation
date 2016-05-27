@@ -6,8 +6,15 @@ namespace Unclassified.TxEditor.Models
     {
         #region Members
 
-        bool Exists();
+        void Backup();
+        bool CanBackup();
+        bool CanCleanBackup();
+        bool CanLoad();
+        bool CanRestore();
+        bool CanSave();
+        void CleanBackup();
         XmlDocument Load();
+        void Restore();
         void Save(XmlDocument document);
 
         #endregion

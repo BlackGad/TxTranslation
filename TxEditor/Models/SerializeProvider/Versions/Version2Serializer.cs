@@ -33,16 +33,25 @@ namespace Unclassified.TxEditor.Models.Versions
             };
         }
 
-        public string GetDisplayName(ISerializeLocation location)
+        public ISerializeDescription DescribeLocation(ISerializeLocation location)
         {
             string name = null;
+            string shortName = null;
             var fileSource = location as FileLocation;
-            if (fileSource != null) name = fileSource.Filename;
+            if (fileSource != null)
+            {
+                name = fileSource.Filename;
+                shortName = Path.GetFileNameWithoutExtension(fileSource.Filename);
+            }
 
             var embeddedSource = location as EmbeddedResourceLocation;
-            if (embeddedSource != null) name = embeddedSource.Name;
+            if (embeddedSource != null)
+            {
+                name = embeddedSource.ToString();
+                shortName = embeddedSource.Name;
+            }
 
-            return Path.GetFileNameWithoutExtension(name);
+            return new SerializeDescription(name, shortName);
         }
 
         public bool IsValid(ISerializeLocation location)
@@ -77,7 +86,7 @@ namespace Unclassified.TxEditor.Models.Versions
                                    .Enumerate<XmlElement>()
                                    .Select(DeserializedCulture)
                                    .Where(k => k != null)
-                                   .ToArray()
+                                   .ToList()
             };
             return new DeserializeInstruction(location, this, deserializeFunc);
         }
@@ -94,7 +103,7 @@ namespace Unclassified.TxEditor.Models.Versions
                                    .Enumerate<XmlElement>()
                                    .Select(DeserializeKey)
                                    .Where(k => k != null)
-                                   .ToArray(),
+                                   .ToList(),
                 IsPrimary = cultureNode?.Attributes["primary"]?.Value?.ToLower() == "true",
                 Name = cultureNode?.Attributes["name"]?.Value
             };
@@ -208,9 +217,12 @@ namespace Unclassified.TxEditor.Models.Versions
                 textElement.Attributes.Append(commentAttr);
             }
 
-            var countAttr = document.CreateAttribute("count");
-            countAttr.Value = key.Count.ToString();
-            textElement.Attributes.Append(countAttr);
+            if (key.Count > -1)
+            {
+                var countAttr = document.CreateAttribute("count");
+                countAttr.Value = key.Count.ToString();
+                textElement.Attributes.Append(countAttr);
+            }
 
             if (key.Modulo != 0 && key.Modulo < 2 && key.Modulo > 1000)
                 throw new Exception("Invalid modulo value " + key.Modulo + " set for text key " + key.Key + ", count " + key.Count);

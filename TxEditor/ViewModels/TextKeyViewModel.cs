@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using System.Reflection;
 using System.Text.RegularExpressions;
+using Unclassified.TxEditor.UI;
 using Unclassified.TxLib;
 using Unclassified.UI;
 using Unclassified.Util;
@@ -188,7 +189,8 @@ namespace Unclassified.TxEditor.ViewModels
 		{
 			get
 			{
-				return !MainWindowVM.IsTemplateFile && TextKey.StartsWith("Tx:");
+                var rootModel = this.FindAncestor(a => a is RootKeyViewModel) as RootKeyViewModel;
+                return rootModel?.IsTemplateFile != true && TextKey.StartsWith("Tx:");
 			}
 		}
 

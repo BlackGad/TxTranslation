@@ -8,8 +8,6 @@
 
         ISerializeLocation[] DetectRelatedLocations(ISerializeLocation location);
 
-        string GetDisplayName(ISerializeLocation location);
-
         bool IsValid(ISerializeLocation location);
 
         SerializeInstruction[] Serialize(ISerializeLocation location, SerializedTranslation translation);

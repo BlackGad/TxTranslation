@@ -8,14 +8,14 @@ namespace Unclassified.TxEditor.Models
 
         #region Constructors
 
-        public DeserializeInstruction(ISerializeLocation location, IVersionSerializer description, Func<SerializedTranslation> deserializeFunc)
+        public DeserializeInstruction(ISerializeLocation location, IVersionSerializer serializer, Func<SerializedTranslation> deserializeFunc)
         {
             if (location == null) throw new ArgumentNullException(nameof(location));
-            if (description == null) throw new ArgumentNullException(nameof(description));
+            if (serializer == null) throw new ArgumentNullException(nameof(serializer));
             if (deserializeFunc == null) throw new ArgumentNullException(nameof(deserializeFunc));
 
             Location = location;
-            Description = description;
+            Serializer = serializer;
             _deserializeFunc = deserializeFunc;
         }
 
@@ -23,7 +23,7 @@ namespace Unclassified.TxEditor.Models
 
         #region Properties
 
-        public IVersionSerializerDescription Description { get; }
+        public IVersionSerializerDescription Serializer { get; }
 
         public ISerializeLocation Location { get; }
 

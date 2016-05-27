@@ -2,6 +2,15 @@
 {
     public class SerializedKey
     {
+        #region Constructors
+
+        public SerializedKey()
+        {
+            Count = -1;
+        }
+
+        #endregion
+
         #region Properties
 
         public bool AcceptMissing { get; set; }

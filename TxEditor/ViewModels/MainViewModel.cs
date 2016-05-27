@@ -14,6 +14,7 @@ using Microsoft.Win32;
 using TaskDialogInterop;
 using Unclassified.FieldLog;
 using Unclassified.TxEditor.Models;
+using Unclassified.TxEditor.UI;
 using Unclassified.TxEditor.Views;
 using Unclassified.TxLib;
 using Unclassified.UI;
@@ -27,11 +28,87 @@ namespace Unclassified.TxEditor.ViewModels
 
 		public static MainViewModel Instance { get; private set; }
 
-		#endregion Static data
+        public static SerializedTranslation DumpTranslation(TextKeyViewModel model)
+        {
+            if (model == null) throw new ArgumentNullException(nameof(model));
+            var mainModel = model.MainWindowVM;
+            var modelsWithKeys = model.FindViewModels(args =>
+            {
+                var textModel = args.Item as TextKeyViewModel;
+                args.IncludeInResult = textModel?.IsFullKey == true && !string.IsNullOrEmpty(textModel.TextKey);
+            }).Cast<TextKeyViewModel>().ToArray();
 
-		#region Private data
+            var cultures = mainModel.LoadedCultureNames.Union(mainModel.DeletedCultureNames)
+                                             .Distinct()
+                                             .ToDictionary(name => name,
+                                                           name => new SerializedCulture
+                                                           {
+                                                               Name = name,
+                                                               IsPrimary = Equals(name, mainModel.PrimaryCulture)
+                                                           });
 
-		private int readonlyFilesCount;
+            var primaryCulture = cultures[mainModel.PrimaryCulture];
+
+            foreach (var textKeyViewModel in modelsWithKeys)
+            {
+                var textKey = textKeyViewModel.TextKey;
+
+                foreach (var cultureTextViewModel in textKeyViewModel.CultureTextVMs)
+                {
+                    //Add base key
+                    var culture = cultures[cultureTextViewModel.CultureName];
+                    Func<string, bool> addKeyPredicate = value =>
+                    {
+                        if (string.IsNullOrEmpty(cultureTextViewModel.Text))
+                        {
+                            return !textKey.StartsWith("Tx:") && Equals(culture, primaryCulture);
+                        }
+
+                        return true;
+                    };
+
+                    if (addKeyPredicate(cultureTextViewModel.Text))
+                    {
+                        culture.Keys.Add(new SerializedKey
+                        {
+                            Key = textKey,
+                            Text = cultureTextViewModel.Text,
+                            Comment = textKeyViewModel.Comment,
+                            AcceptMissing = cultureTextViewModel.AcceptMissing,
+                            AcceptPlaceholders = cultureTextViewModel.AcceptPlaceholders,
+                            AcceptPunctuation = cultureTextViewModel.AcceptPunctuation
+                        });
+                    }
+
+                    foreach (var quantifiedTextViewModel in cultureTextViewModel.QuantifiedTextVMs)
+                    {
+                        if (!addKeyPredicate(quantifiedTextViewModel.Text)) continue;
+
+                        culture.Keys.Add(new SerializedKey
+                        {
+                            Key = textKey,
+                            Text = quantifiedTextViewModel.Text,
+                            AcceptMissing = quantifiedTextViewModel.AcceptMissing,
+                            AcceptPlaceholders = quantifiedTextViewModel.AcceptPlaceholders,
+                            AcceptPunctuation = quantifiedTextViewModel.AcceptPunctuation,
+                            Count = quantifiedTextViewModel.Count,
+                            Modulo = quantifiedTextViewModel.Modulo
+                        });
+                    }
+                }
+            }
+            var rootModel = model.FindAncestor(a => a is RootKeyViewModel) as RootKeyViewModel;
+            return new SerializedTranslation
+            {
+                IsTemplate = rootModel?.IsTemplateFile == true,
+                Cultures = cultures.Values.ToList()
+            };
+        }
+        #endregion Static data
+
+        #region Private data
+
+        private int readonlyFilesCount;
 		private List<TextKeyViewModel> selectedTextKeys;
 		private List<TextKeyViewModel> viewHistory = new List<TextKeyViewModel>();
 		private int viewHistoryIndex;
@@ -115,8 +192,6 @@ namespace Unclassified.TxEditor.ViewModels
 			get { return GetValue<string>("PrimaryCulture"); }
 			set { SetValue(value, "PrimaryCulture"); }
 		}
-
-		public bool IsTemplateFile { get; set; }
 
 		public bool ProblemFilterActive
 		{
@@ -465,7 +540,6 @@ namespace Unclassified.TxEditor.ViewModels
 			LoadedCultureNames.Clear();
 			DeletedCultureNames.Clear();
 			PrimaryCulture = null;
-			IsTemplateFile = false;
 			ProblemKeys.Clear();
 			StatusText = Tx.T("statusbar.new dictionary created");
 			UpdateTitle();
@@ -496,7 +570,7 @@ namespace Unclassified.TxEditor.ViewModels
                     title: "TxEditor",
                     mainInstruction: Tx.T("msg.load folder.multiple dictionaries in folder"),
                     content: Tx.T("msg.load folder.multiple dictionaries in folder.desc"),
-                    radioButtons: uniqueTranslations.Select(t=>t.Name).ToArray(),
+                    radioButtons: uniqueTranslations.Select(t=>t.Description.ShortName).ToArray(),
                     customButtons: new[] { Tx.T("task dialog.button.load"), Tx.T("task dialog.button.cancel") },
                     allowDialogCancellation: true);
                 if (result.CustomButtonResult != 0 ||
@@ -508,7 +582,7 @@ namespace Unclassified.TxEditor.ViewModels
                 selectedTranslation = uniqueTranslations[result.RadioButtonResult.Value];
             }
 
-            if (selectedTranslation == null)
+            if (selectedTranslation == null || !selectedTranslation.DeserializeInstructions.Any())
             {
                 App.WarningMessage(Tx.T("msg.load folder.no files found"));
                 return;
@@ -542,11 +616,15 @@ namespace Unclassified.TxEditor.ViewModels
                 }
             }
 
+            RootTextKey.Location = selectedTranslation.DeserializeInstructions.First().Location;
+            RootTextKey.Serializer = selectedTranslation.DeserializeInstructions.First().Serializer;
+
             SortCulturesInTextKey(RootTextKey);
             DeletedCultureNames.Clear();
             ValidateTextKeysDelayed();
             StatusText = Tx.T("statusbar.n files loaded", selectedTranslation.DeserializeInstructions.Length) + Tx.T("statusbar.n text keys defined", TextKeys.Count);
             FileModified = false;
+            UpdateTitle();
             ClearViewHistory();
             CheckNotifyReadonlyFiles();
         }
@@ -594,7 +672,7 @@ namespace Unclassified.TxEditor.ViewModels
 
 			var foundFiles = false;
 			string prevPrimaryCulture = null;
-			List<string> primaryCultureFiles = new List<string>();
+			var primaryCultureFiles = new List<string>();
 			foreach (string fileName in filesToLoad)
 			{
 				if (!foundFiles)
@@ -603,7 +681,7 @@ namespace Unclassified.TxEditor.ViewModels
 					FileModified = false;   // Prevent another unsaved warning from OnNewFile
 					OnNewFile();   // Clear any currently loaded content
 				}
-				if (!LoadFromXmlFile(fileName))
+				if (!LoadFrom(new FileLocation(fileName)))
 				{
 					break;
 				}
@@ -618,12 +696,13 @@ namespace Unclassified.TxEditor.ViewModels
 				// Display a warning if multiple (and which) files claimed to be the primary culture, and which has won
 				App.WarningMessage(Tx.T("msg.load file.multiple primary cultures", "list", string.Join(", ", primaryCultureFiles), "name", PrimaryCulture));
 			}
-
+            
 			SortCulturesInTextKey(RootTextKey);
 			DeletedCultureNames.Clear();
 			ValidateTextKeysDelayed();
 			StatusText = Tx.T("statusbar.n files loaded", filesToLoad.Count) + Tx.T("statusbar.n text keys defined", TextKeys.Count);
 			FileModified = false;
+            UpdateTitle();
 			ClearViewHistory();
 			CheckNotifyReadonlyFiles();
 		}
@@ -635,11 +714,9 @@ namespace Unclassified.TxEditor.ViewModels
 
 		private bool Save()
 		{
-		    var serializer = RootTextKey.Serializer;
-            string newFilePath = null;
-			string newFilePrefix = null;
-
-			if (RootTextKey.LoadedFilePath == null || RootTextKey.LoadedFilePrefix == null)
+		    var serializer = RootTextKey.Serializer ?? SerializeProvider.Instance.Version2;
+		    ISerializeLocation newLocation = null;
+			if (RootTextKey.Location == null)
 			{
 				// Ask for new file name and version
 			    var dlg = new SaveFileDialog
@@ -655,8 +732,7 @@ namespace Unclassified.TxEditor.ViewModels
 			    };
 			    if (dlg.ShowDialog(MainWindow.Instance) == true)
 				{
-					newFilePath = Path.GetDirectoryName(dlg.FileName);
-					newFilePrefix = Path.GetFileNameWithoutExtension(dlg.FileName);
+                    newLocation = new FileLocation(dlg.FileName);
 					if (Path.GetExtension(dlg.FileName) == ".xml") serializer = SerializeProvider.Instance.Version1;
 				}
 				else
@@ -738,15 +814,15 @@ namespace Unclassified.TxEditor.ViewModels
 				}
 			}
 
-			if (newFilePath != null)
+		    RootTextKey.Serializer = serializer;
+            if (newLocation != null)
 			{
-				if (!SaveToXmlFile(Path.Combine(newFilePath, newFilePrefix))) return false;
-				RootTextKey.LoadedFilePath = newFilePath;
-				RootTextKey.LoadedFilePrefix = newFilePrefix;
+				if (!RootTextKey.SaveTo(newLocation)) return false;
+				RootTextKey.Location = newLocation;
 			}
 			else
 			{
-				if (!SaveToXmlFile(Path.Combine(RootTextKey.LoadedFilePath, RootTextKey.LoadedFilePrefix))) return false;
+				if (!RootTextKey.SaveTo(RootTextKey.Location)) return false;
 			}
 			UpdateTitle();
 			StatusText = Tx.T("statusbar.file saved");
@@ -1939,21 +2015,14 @@ namespace Unclassified.TxEditor.ViewModels
 			importNewCultures = null;
 			foreach (string _fileName in fileNames.Distinct())
 			{
-				string fileName = _fileName;
-				if (!Path.IsPathRooted(fileName))
-				{
-					fileName = Path.GetFullPath(fileName);
-				}
-				if (!LoadFromXmlFile(fileName))
-				{
-					break;
-				}
-				count++;
-				if (PrimaryCulture != prevPrimaryCulture)
-				{
-					primaryCultureFiles.Add(PrimaryCulture);
-				}
-				prevPrimaryCulture = PrimaryCulture;
+				var fileName = _fileName;
+			    if (!Path.IsPathRooted(fileName)) fileName = Path.GetFullPath(fileName);
+			    if (!LoadFrom(new FileLocation(fileName))) break;
+			    count++;
+
+			    if (PrimaryCulture != prevPrimaryCulture) primaryCultureFiles.Add(PrimaryCulture);
+
+			    prevPrimaryCulture = PrimaryCulture;
 			}
 			importNewCultures = null;
 			if (primaryCultureFiles.Count > 1)
@@ -2029,16 +2098,19 @@ namespace Unclassified.TxEditor.ViewModels
             return true;
         }
 
-	    private bool LoadFromXmlFile(string fileName)
+	    private bool LoadFrom(ISerializeLocation location)
         {
-            var fi = new FileInfo(fileName);
-            if (fi.Exists && fi.IsReadOnly) SetReadonlyFiles();
+	        if (location is FileLocation)
+	        {
+                var fi = new FileInfo(((FileLocation)location).Filename);
+                if (fi.Exists && fi.IsReadOnly) SetReadonlyFiles();
+            }
+            
 
             SerializedTranslation translation;
 	        IVersionSerializerDescription serializer;
 	        try
             {
-                var location = new FileLocation(fileName);
                 var serializeProvider = SerializeProvider.Instance;
 
                 serializer = serializeProvider.DetectSerializer(location);
@@ -2046,7 +2118,7 @@ namespace Unclassified.TxEditor.ViewModels
             }
             catch (Exception ex)
             {
-                FL.Error("Error loading file", fileName);
+                FL.Error("Error loading file", location.ToString());
                 FL.Error(ex, "Loading XML dictionary file");
                 var result = TaskDialog.Show(
                     owner: MainWindow.Instance,
@@ -2054,14 +2126,14 @@ namespace Unclassified.TxEditor.ViewModels
                     title: "TxEditor",
                     mainIcon: VistaTaskDialogIcon.Error,
                     mainInstruction: Tx.T("msg.load file.invalid file"),
-                    content: Tx.T("msg.load file.invalid file.desc", "name", fileName, "msg", ex.Message),
+                    content: Tx.T("msg.load file.invalid file.desc", "name", location.ToString(), "msg", ex.Message),
                     customButtons: new[] { Tx.T("task dialog.button.skip file"), Tx.T("task dialog.button.cancel") });
 
                 return result.CustomButtonResult == 0;
             }
 
             // Don't mix template and non-template files (not relevant when importing a file)
-            if (translation.IsTemplate && !IsTemplateFile && LoadedCultureNames.Count > 0 || !translation.IsTemplate && IsTemplateFile)
+            if (translation.IsTemplate && !RootTextKey.IsTemplateFile && LoadedCultureNames.Count > 0 || !translation.IsTemplate && RootTextKey.IsTemplateFile)
             {
                 FL.Warning("Trying to mix template and non-template files on loading");
                 var result = TaskDialog.Show(
@@ -2070,12 +2142,12 @@ namespace Unclassified.TxEditor.ViewModels
                     title: "TxEditor",
                     mainIcon: VistaTaskDialogIcon.Warning,
                     mainInstruction: Tx.T("msg.load file.mixed templates"),
-                    content: Tx.T("msg.load file.mixed templates.desc", "name", fileName),
+                    content: Tx.T("msg.load file.mixed templates.desc", "name", location.ToString()),
                     customButtons: new[] { Tx.T("task dialog.button.skip file"), Tx.T("task dialog.button.cancel") });
 
                 return result.CustomButtonResult == 0;
             }
-            IsTemplateFile = translation.IsTemplate;
+            RootTextKey.IsTemplateFile = translation.IsTemplate;
 
 
             foreach (var culture in translation.Cultures.Enumerate())
@@ -2083,7 +2155,9 @@ namespace Unclassified.TxEditor.ViewModels
                 ComposeKeys(culture.Name, culture.Keys);
             }
 
-	        RootTextKey.Serializer = serializer;
+            RootTextKey.Location = location;
+
+            RootTextKey.Serializer = serializer;
             PrimaryCulture = translation.Cultures.FirstOrDefault(c => c.IsPrimary)?.Name ?? PrimaryCulture;
 
             return true;
@@ -2262,224 +2336,9 @@ namespace Unclassified.TxEditor.ViewModels
 			}
 		}
 
-		#endregion XML loading methods
+        #endregion XML loading methods
 
-		#region XML saving methods
-
-		/// <summary>
-		/// Writes all loaded text keys to a file.
-		/// </summary>
-		/// <param name="fileNamePrefix">Path and file name prefix, without culture name and extension.</param>
-		/// <returns>true, if the file was saved successfully, false otherwise.</returns>
-		private bool SaveToXmlFile(string fileNamePrefix)
-		{
-			if (Equals(RootTextKey.Serializer, SerializeProvider.Instance.Version1))
-			{
-				// Check all files for read-only attribute
-				foreach (var cultureName in LoadedCultureNames.Union(DeletedCultureNames).Distinct())
-				{
-					string cultureFileName = fileNamePrefix + "." + cultureName + ".xml";
-					FileInfo fi = new FileInfo(cultureFileName);
-					if (fi.Exists && fi.IsReadOnly)
-					{
-						App.ErrorMessage(Tx.T("msg.cannot write to read-only file"));
-						return false;
-					}
-				}
-
-				// Delete previous backups and move current files to backup
-				foreach (var cultureName in LoadedCultureNames.Union(DeletedCultureNames).Distinct())
-				{
-					string cultureFileName = fileNamePrefix + "." + cultureName + ".xml";
-					if (File.Exists(cultureFileName))
-					{
-						try
-						{
-							File.Delete(cultureFileName + ".bak");
-						}
-						catch (Exception ex)
-						{
-							App.ErrorMessage(Tx.T("msg.cannot delete backup file", "name", cultureFileName + ".bak"), ex, "Saving file, deleting old backups");
-							return false;
-						}
-						try
-						{
-							File.Move(cultureFileName, cultureFileName + ".bak");
-						}
-						catch (Exception ex)
-						{
-							App.ErrorMessage(Tx.T("msg.cannot backup file.v1", "name", cultureFileName), ex, "Saving file, creating backups");
-							return false;
-						}
-					}
-				}
-
-				// Write new files, one for each loaded culture
-				foreach (var cultureName in LoadedCultureNames)
-				{
-					XmlDocument xmlDoc = new XmlDocument();
-					xmlDoc.AppendChild(xmlDoc.CreateElement("translation"));
-					var spaceAttr = xmlDoc.CreateAttribute("xml:space");
-					spaceAttr.Value = "preserve";
-					xmlDoc.DocumentElement.Attributes.Append(spaceAttr);
-					if (cultureName == PrimaryCulture)
-					{
-						var primaryAttr = xmlDoc.CreateAttribute("primary");
-						primaryAttr.Value = "true";
-						xmlDoc.DocumentElement.Attributes.Append(primaryAttr);
-					}
-					if (IsTemplateFile)
-					{
-						var templateAttr = xmlDoc.CreateAttribute("template");
-						templateAttr.Value = "true";
-						xmlDoc.DocumentElement.Attributes.Append(templateAttr);
-					}
-					WriteToXml(cultureName, xmlDoc.DocumentElement, false);
-
-					// Write xmlDoc to file
-					try
-					{
-						WriteXmlToFile(xmlDoc, fileNamePrefix + "." + cultureName + ".xml");
-					}
-					catch (Exception ex)
-					{
-						App.ErrorMessage(Tx.T("msg.cannot write file.v1", "name", fileNamePrefix + "." + cultureName + ".xml"), ex, "Saving file");
-						return false;
-					}
-				}
-
-				// Delete all backup files (could also be an option)
-				int deleteErrorCount = 0;
-				foreach (var cultureName in LoadedCultureNames.Union(DeletedCultureNames).Distinct())
-				{
-					string cultureFileName = fileNamePrefix + "." + cultureName + ".xml";
-					try
-					{
-						File.Delete(cultureFileName + ".bak");
-					}
-					catch
-					{
-						deleteErrorCount++;
-					}
-				}
-				if (deleteErrorCount > 0)
-				{
-					App.ErrorMessage(Tx.T("msg.cannot delete new backup file.v1"));
-				}
-				DeletedCultureNames.Clear();
-			}
-			else if (Equals(RootTextKey.Serializer, SerializeProvider.Instance.Version2))
-			{
-				// Check file for read-only attribute
-				FileInfo fi = new FileInfo(fileNamePrefix + ".txd");
-				if (fi.Exists && fi.IsReadOnly)
-				{
-					App.ErrorMessage(Tx.T("msg.cannot write to read-only file"));
-					return false;
-				}
-
-				// Delete previous backup and move current file to backup
-				bool haveBackup = false;
-				if (File.Exists(fileNamePrefix + ".txd"))
-				{
-					try
-					{
-						File.Delete(fileNamePrefix + ".txd.bak");
-					}
-					catch (Exception ex)
-					{
-						App.ErrorMessage(Tx.T("msg.cannot delete backup file", "name", fileNamePrefix + ".txd.bak"), ex, "Saving file, deleting old backup");
-						return false;
-					}
-					try
-					{
-						File.Move(fileNamePrefix + ".txd", fileNamePrefix + ".txd.bak");
-						haveBackup = true;
-					}
-					catch (Exception ex)
-					{
-						App.ErrorMessage(Tx.T("msg.cannot backup file.v2", "name", fileNamePrefix + ".txd"), ex, "Saving file, creating backup");
-						return false;
-					}
-				}
-
-				XmlDocument xmlDoc = new XmlDocument();
-				xmlDoc.AppendChild(xmlDoc.CreateComment(" TxTranslation dictionary file. Use TxEditor to edit this file. http://unclassified.software/txtranslation "));
-				xmlDoc.AppendChild(xmlDoc.CreateElement("translation"));
-				var spaceAttr = xmlDoc.CreateAttribute("xml:space");
-				spaceAttr.Value = "preserve";
-				xmlDoc.DocumentElement.Attributes.Append(spaceAttr);
-				if (IsTemplateFile)
-				{
-					var templateAttr = xmlDoc.CreateAttribute("template");
-					templateAttr.Value = "true";
-					xmlDoc.DocumentElement.Attributes.Append(templateAttr);
-				}
-
-				foreach (var cultureName in LoadedCultureNames.OrderBy(cn => cn))
-				{
-					var cultureElement = xmlDoc.CreateElement("culture");
-					xmlDoc.DocumentElement.AppendChild(cultureElement);
-					var nameAttr = xmlDoc.CreateAttribute("name");
-					nameAttr.Value = cultureName;
-					cultureElement.Attributes.Append(nameAttr);
-					if (cultureName == PrimaryCulture)
-					{
-						var primaryAttr = xmlDoc.CreateAttribute("primary");
-						primaryAttr.Value = "true";
-						cultureElement.Attributes.Append(primaryAttr);
-					}
-					WriteToXml(cultureName, cultureElement, false);
-				}
-
-				// Write xmlDoc to file
-				try
-				{
-					WriteXmlToFile(xmlDoc, fileNamePrefix + ".txd");
-				}
-				catch (Exception ex)
-				{
-					// Try to restore the backup file
-					if (haveBackup)
-					{
-						try
-						{
-							File.Delete(fileNamePrefix + ".txd");
-							File.Move(fileNamePrefix + ".txd.bak", fileNamePrefix + ".txd");
-
-							App.ErrorMessage(Tx.T("msg.cannot write file.v2 restored", "name", fileNamePrefix + ".txd"), ex, "Saving file");
-						}
-						catch (Exception ex2)
-						{
-							App.ErrorMessage(Tx.T("msg.cannot write file.v2", "name", fileNamePrefix + ".txd", "firstmsg", ex.Message), ex2, "Saving file, restoring backup");
-						}
-					}
-					else
-					{
-						App.ErrorMessage(Tx.T("msg.cannot write file.v2 no backup", "name", fileNamePrefix + ".txd"), ex, "Saving file");
-					}
-					return false;
-				}
-
-				// Delete backup file (could also be an option)
-				try
-				{
-					File.Delete(fileNamePrefix + ".txd.bak");
-				}
-				catch (Exception ex)
-				{
-					App.ErrorMessage(Tx.T("msg.cannot delete new backup file.v2", "name", fileNamePrefix + ".txd.bak"), ex, "Saving file, deleting new backup");
-				}
-			}
-			else
-			{
-				App.ErrorMessage(Tx.T("msg.cannot save unsupported file version", "ver", RootTextKey.Serializer.Name));
-				return false;
-			}
-			FileModified = false;
-			return true;
-		}
-        
+        #region XML saving methods
         
         /// <summary>
 		/// Exports all loaded text keys to a file.
@@ -2618,8 +2477,7 @@ namespace Unclassified.TxEditor.ViewModels
 
 		private void WriteTextKeysToXml(string cultureName, XmlElement xe, TextKeyViewModel textKeyVM, bool exporting)
 		{
-			if (textKeyVM.IsFullKey && textKeyVM.TextKey != null &&
-				(!exporting || textKeyVM.IsSelectedRecursive()))
+			if (textKeyVM.IsFullKey && textKeyVM.TextKey != null && (!exporting || textKeyVM.IsSelectedRecursive()))
 			{
 				var cultureTextVM = textKeyVM.CultureTextVMs.FirstOrDefault(vm => vm.CultureName == cultureName);
 				if (cultureTextVM != null)
@@ -2953,19 +2811,9 @@ namespace Unclassified.TxEditor.ViewModels
 
 		private void UpdateTitle()
 		{
-			if (!string.IsNullOrEmpty(RootTextKey.LoadedFilePath))
-			{
-                var builder = new StringBuilder();
-			    builder.Append(RootTextKey.LoadedFilePrefix);
-			    if (FileModified) builder.Append("*");
-			    builder.AppendFormat("({0})", RootTextKey.Serializer.Name);
-			    builder.Append(" " + Tx.T("window.title.in path") + " " + RootTextKey.LoadedFilePath + " – TxEditor");
-			    DisplayName = builder.ToString();
-			}
-			else
-			{
-				DisplayName = "TxEditor";
-			}
+		    var formattedTitle = RootTextKey.FormatTitle();
+		    if (string.IsNullOrEmpty(formattedTitle)) DisplayName = "TxEditor";
+		    else DisplayName = formattedTitle + " – TxEditor";
 		}
 
 		private void SelectTextKey(TextKeyViewModel tk, bool async = false)

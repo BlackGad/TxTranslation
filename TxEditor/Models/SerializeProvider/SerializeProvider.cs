@@ -78,7 +78,7 @@ namespace Unclassified.TxEditor.Models
                         processedFiles.Add(((FileLocation)instruction.Location).Filename);
                     }
 
-                    yield return new DetectedTranslation(serializer.GetDisplayName(location), instructions);
+                    yield return new DetectedTranslation(serializer.DescribeLocation(location), instructions);
                 }
             }
         }

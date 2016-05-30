@@ -21,9 +21,7 @@ namespace Unclassified.TxEditor.ViewModels
 			TextKeyVM = textKeyVM;
 			LastOfLanguage = true;   // Change value once to set the brush value
 
-			BackgroundBrush = cultureName == TextKeyVM.MainWindowVM.PrimaryCulture ?
-				new SolidColorBrush(Color.FromArgb(20, 0, 192, 0)) :
-				new SolidColorBrush(Color.FromArgb(20, 0, 192, 0));
+			BackgroundBrush = new SolidColorBrush(Color.FromArgb(20, 0, 192, 0));
 
 			if (App.Settings.View.NativeCultureNames)
 				cultureNativeName = Tx.U(CultureInfo.GetCultureInfo(cultureName).NativeName);
@@ -35,7 +33,7 @@ namespace Unclassified.TxEditor.ViewModels
 
 		#region Public properties
 
-		public TextKeyViewModel TextKeyVM { get; private set; }
+		public TextKeyViewModel TextKeyVM { get; }
 
 		private string cultureName;
 		public string CultureName
@@ -60,8 +58,8 @@ namespace Unclassified.TxEditor.ViewModels
 				if (SetValue(value, "Text"))
 				{
 					TextKeyVM.MainWindowVM.ValidateTextKeysDelayed();
-					TextKeyVM.MainWindowVM.FileModified = true;
-				}
+                    TextKeyVM.ModelWasChanged();
+                }
 			}
 		}
 
@@ -94,8 +92,8 @@ namespace Unclassified.TxEditor.ViewModels
 				if (SetValue(BooleanBoxes.Box(value), "AcceptMissing"))
 				{
 					TextKeyVM.MainWindowVM.ValidateTextKeysDelayed();
-					TextKeyVM.MainWindowVM.FileModified = true;
-				}
+                    TextKeyVM.ModelWasChanged();
+                }
 			}
 		}
 
@@ -110,8 +108,8 @@ namespace Unclassified.TxEditor.ViewModels
 				if (SetValue(BooleanBoxes.Box(value), "AcceptPlaceholders"))
 				{
 					TextKeyVM.MainWindowVM.ValidateTextKeysDelayed();
-					TextKeyVM.MainWindowVM.FileModified = true;
-				}
+                    TextKeyVM.ModelWasChanged();
+                }
 			}
 		}
 
@@ -126,8 +124,8 @@ namespace Unclassified.TxEditor.ViewModels
 				if (SetValue(BooleanBoxes.Box(value), "AcceptPunctuation"))
 				{
 					TextKeyVM.MainWindowVM.ValidateTextKeysDelayed();
-					TextKeyVM.MainWindowVM.FileModified = true;
-				}
+                    TextKeyVM.ModelWasChanged();
+                }
 			}
 		}
 
@@ -244,8 +242,8 @@ namespace Unclassified.TxEditor.ViewModels
 			newVM.Count = 0;
 			QuantifiedTextVMs.Add(newVM);
 			TextKeyVM.MainWindowVM.ValidateTextKeysDelayed();
-			TextKeyVM.MainWindowVM.FileModified = true;
-			newVM.ViewCommandManager.InvokeLoaded("FocusText");
+            TextKeyVM.ModelWasChanged();
+            newVM.ViewCommandManager.InvokeLoaded("FocusText");
 		}
 
 		private void OnAddCount1()
@@ -254,8 +252,8 @@ namespace Unclassified.TxEditor.ViewModels
 			newVM.Count = 1;
 			QuantifiedTextVMs.Add(newVM);
 			TextKeyVM.MainWindowVM.ValidateTextKeysDelayed();
-			TextKeyVM.MainWindowVM.FileModified = true;
-			newVM.ViewCommandManager.InvokeLoaded("FocusText");
+            TextKeyVM.ModelWasChanged();
+            newVM.ViewCommandManager.InvokeLoaded("FocusText");
 		}
 
 		private void OnAdd()
@@ -264,7 +262,7 @@ namespace Unclassified.TxEditor.ViewModels
 			newVM.Count = -1;
 			QuantifiedTextVMs.Add(newVM);
 			TextKeyVM.MainWindowVM.ValidateTextKeysDelayed();
-			TextKeyVM.MainWindowVM.FileModified = true;
+			TextKeyVM.ModelWasChanged();
 			newVM.ViewCommandManager.InvokeLoaded("FocusCount");
 		}
 

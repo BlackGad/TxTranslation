@@ -1,5 +1,4 @@
-﻿using System.Linq;
-using System.Text;
+﻿using System.Text;
 using Unclassified.TxEditor.Models;
 using Unclassified.TxLib;
 
@@ -7,6 +6,8 @@ namespace Unclassified.TxEditor.ViewModels
 {
     class RootKeyViewModel : TextKeyViewModel
     {
+        private bool _hasUnsavedChanges;
+
         #region Constructors
 
         public RootKeyViewModel(MainViewModel mainWindowVm)
@@ -18,7 +19,16 @@ namespace Unclassified.TxEditor.ViewModels
 
         #region Properties
 
-        public bool HasUnsavedChanges { get; set; }
+        public bool HasUnsavedChanges
+        {
+            get { return _hasUnsavedChanges; }
+            set
+            {
+                _hasUnsavedChanges = value;
+                MainWindowVM.ModelWasChanged(this);
+            }
+        }
+
         public bool IsTemplate { get; set; }
 
         public ISerializeLocation Location { get; set; }

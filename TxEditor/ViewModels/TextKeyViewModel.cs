@@ -176,12 +176,9 @@ namespace Unclassified.TxEditor.ViewModels
 				{
 					// Only set the toolbar indicator if this key is selected, to prevent switching
 					// it on while loading a dictionary and building the model instances.
-					if (IsSelected)
-					{
-						MainWindowVM.HaveComment = !string.IsNullOrWhiteSpace(Comment);
-					}
-					MainWindowVM.FileModified = true;
-				}
+				    if (IsSelected) MainWindowVM.HaveComment = !string.IsNullOrWhiteSpace(Comment);
+				    ModelWasChanged();
+                }
 			}
 		}
 
@@ -233,11 +230,21 @@ namespace Unclassified.TxEditor.ViewModels
 			return true;
 		}
 
-		/// <summary>
-		/// Returns a value indicating whether the text key or any parent is selected.
-		/// </summary>
-		/// <returns></returns>
-		public bool IsSelectedRecursive()
+        /// <summary>
+        /// Notifies root key about changes
+        /// </summary>
+        public void ModelWasChanged()
+        {
+            var rootKey = this.FindAncestor(t => t is RootKeyViewModel) as RootKeyViewModel;
+            if (rootKey == null) throw new InvalidOperationException();
+            rootKey.HasUnsavedChanges = true;
+        }
+
+        /// <summary>
+        /// Returns a value indicating whether the text key or any parent is selected.
+        /// </summary>
+        /// <returns></returns>
+        public bool IsSelectedRecursive()
 		{
 			if (IsSelected) return true;
 			TextKeyViewModel parentVM = Parent as TextKeyViewModel;

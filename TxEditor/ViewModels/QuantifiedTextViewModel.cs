@@ -31,8 +31,8 @@ namespace Unclassified.TxEditor.ViewModels
 				if (SetValue(value, "Count"))
 				{
 					CultureTextVM.TextKeyVM.MainWindowVM.ValidateTextKeysDelayed();
-					CultureTextVM.TextKeyVM.MainWindowVM.FileModified = true;
-				}
+					CultureTextVM.TextKeyVM.ModelWasChanged();
+                }
 			}
 		}
 
@@ -47,8 +47,8 @@ namespace Unclassified.TxEditor.ViewModels
 				if (SetValue(value, "Modulo"))
 				{
 					CultureTextVM.TextKeyVM.MainWindowVM.ValidateTextKeysDelayed();
-					CultureTextVM.TextKeyVM.MainWindowVM.FileModified = true;
-				}
+					CultureTextVM.TextKeyVM.ModelWasChanged();
+                }
 			}
 		}
 
@@ -63,8 +63,8 @@ namespace Unclassified.TxEditor.ViewModels
 				if (SetValue(value, "Text"))
 				{
 					CultureTextVM.TextKeyVM.MainWindowVM.ValidateTextKeysDelayed();
-					CultureTextVM.TextKeyVM.MainWindowVM.FileModified = true;
-				}
+					CultureTextVM.TextKeyVM.ModelWasChanged();
+                }
 			}
 		}
 
@@ -97,8 +97,8 @@ namespace Unclassified.TxEditor.ViewModels
 				if (SetValue(BooleanBoxes.Box(value), "AcceptMissing"))
 				{
 					CultureTextVM.TextKeyVM.MainWindowVM.ValidateTextKeysDelayed();
-					CultureTextVM.TextKeyVM.MainWindowVM.FileModified = true;
-				}
+					CultureTextVM.TextKeyVM.ModelWasChanged();
+                }
 			}
 		}
 
@@ -113,8 +113,8 @@ namespace Unclassified.TxEditor.ViewModels
 				if (SetValue(BooleanBoxes.Box(value), "AcceptPlaceholders"))
 				{
 					CultureTextVM.TextKeyVM.MainWindowVM.ValidateTextKeysDelayed();
-					CultureTextVM.TextKeyVM.MainWindowVM.FileModified = true;
-				}
+					CultureTextVM.TextKeyVM.ModelWasChanged();
+                }
 			}
 		}
 
@@ -129,8 +129,8 @@ namespace Unclassified.TxEditor.ViewModels
 				if (SetValue(BooleanBoxes.Box(value), "AcceptPunctuation"))
 				{
 					CultureTextVM.TextKeyVM.MainWindowVM.ValidateTextKeysDelayed();
-					CultureTextVM.TextKeyVM.MainWindowVM.FileModified = true;
-				}
+					CultureTextVM.TextKeyVM.ModelWasChanged();
+                }
 			}
 		}
 
@@ -184,9 +184,9 @@ namespace Unclassified.TxEditor.ViewModels
 
 			CultureTextVM.QuantifiedTextVMs.Remove(this);
 			CultureTextVM.TextKeyVM.MainWindowVM.ValidateTextKeysDelayed();
-			CultureTextVM.TextKeyVM.MainWindowVM.FileModified = true;
+			CultureTextVM.TextKeyVM.ModelWasChanged();
 
-			if (CultureTextVM.QuantifiedTextVMs.Count == 0)
+            if (CultureTextVM.QuantifiedTextVMs.Count == 0)
 			{
 				CultureTextVM.ViewCommandManager.InvokeLoaded("FocusText");
 			}

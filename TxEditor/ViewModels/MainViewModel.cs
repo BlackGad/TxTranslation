@@ -150,15 +150,15 @@ namespace Unclassified.TxEditor.ViewModels
                 return false;
             }
 
-            var serialized = instructions.BatchOperation(i => i.Serialize()).ToList();
+            var failedSerializations = instructions.BatchOperation(i => i.Serialize()).ToList();
 
-            foreach (var exception in serialized)
+            foreach (var exception in failedSerializations)
             {
                 //TODO: Show batch message
                 App.ErrorMessage(string.Format("Cannot serialize \"{0}\". Rolling back.", exception.Instruction.Location), exception, "Saving file");
             }
 
-            if (serialized.Any())
+            if (failedSerializations.Any())
             {
                 var restoreRequired = instructions.Where(i => i.Location.CanRestore());
                 var failedRestore = restoreRequired.BatchOperation(i => i.Location.Restore()).ToList();
@@ -177,7 +177,7 @@ namespace Unclassified.TxEditor.ViewModels
                 App.ErrorMessage(string.Format("Cannot remove backup for \"{0}\".", exception.Instruction.Location), exception, "Saving file");
             }
 
-            return !serialized.Any();
+            return !failedSerializations.Any();
         }
 
         #endregion Static data
@@ -239,27 +239,6 @@ namespace Unclassified.TxEditor.ViewModels
 		public IAppSettings Settings
 		{
 			get { return App.Settings; }
-		}
-
-		public bool FileModified
-		{
-			get
-			{
-				return GetValue<bool>("FileModified");
-			}
-			set
-			{
-				if (value && !dateTimeWindow.IsClosed())   // Extension method, accepts null
-				{
-					dateTimeWindow.UpdateView();
-				}
-
-				if (SetValue(BooleanBoxes.Box(value), "FileModified"))
-				{
-					UpdateTitle();
-					SaveCommand.RaiseCanExecuteChanged();
-				}
-			}
 		}
 
 		public string PrimaryCulture
@@ -534,7 +513,7 @@ namespace Unclassified.TxEditor.ViewModels
 			NewFileCommand = new DelegateCommand(OnNewFile);
 			LoadFolderCommand = new DelegateCommand(OnLoadFolder);
 			LoadFileCommand = new DelegateCommand(OnLoadFile);
-			SaveCommand = new DelegateCommand(OnSave, () => FileModified);
+			SaveCommand = new DelegateCommand(OnSave, () => RootTextKey.HasUnsavedChanges);
 			ImportFileCommand = new DelegateCommand(OnImportFile);
 			ExportKeysCommand = new DelegateCommand(OnExportKeys, CanExportKeys);
 			// Culture section
@@ -580,14 +559,14 @@ namespace Unclassified.TxEditor.ViewModels
 
 		internal bool CheckModifiedSaved()
 		{
-			if (FileModified)
+			if (RootTextKey.HasUnsavedChanges)
 			{
 				var result = TaskDialog.Show(
 					owner: MainWindow.Instance,
 					title: "TxEditor",
 					mainInstruction: Tx.T("msg.save.save changes"),
 					content: Tx.T("msg.save.save changes.desc"),
-					customButtons: new string[] { Tx.T("task dialog.button.save"), Tx.T("task dialog.button.dont save"), Tx.T("task dialog.button.cancel") },
+					customButtons: new[] { Tx.T("task dialog.button.save"), Tx.T("task dialog.button.dont save"), Tx.T("task dialog.button.cancel") },
 					allowDialogCancellation: true);
 
 				if (result.CustomButtonResult == 0)
@@ -595,11 +574,11 @@ namespace Unclassified.TxEditor.ViewModels
 					// Save
 					return Save();
 				}
-				else if (result.CustomButtonResult != 1)
-				{
-					// Cancel or unset
-					return false;
-				}
+			    if (result.CustomButtonResult != 1)
+			    {
+			        // Cancel or unset
+			        return false;
+			    }
 			}
 			return true;
 		}
@@ -698,7 +677,7 @@ namespace Unclassified.TxEditor.ViewModels
             DeletedCultureNames.Clear();
             ValidateTextKeysDelayed();
             StatusText = Tx.T("statusbar.n files loaded", selectedTranslation.DeserializeInstructions.Length) + Tx.T("statusbar.n text keys defined", TextKeys.Count);
-            FileModified = false;
+            RootTextKey.HasUnsavedChanges = false;
             UpdateTitle();
             ClearViewHistory();
             CheckNotifyReadonlyFiles();
@@ -753,7 +732,7 @@ namespace Unclassified.TxEditor.ViewModels
 				if (!foundFiles)
 				{
 					foundFiles = true;
-					FileModified = false;   // Prevent another unsaved warning from OnNewFile
+                    RootTextKey.HasUnsavedChanges = false;   // Prevent another unsaved warning from OnNewFile
 					OnNewFile();   // Clear any currently loaded content
 				}
 				if (!LoadFrom(new FileLocation(fileName)))
@@ -776,7 +755,7 @@ namespace Unclassified.TxEditor.ViewModels
 			DeletedCultureNames.Clear();
 			ValidateTextKeysDelayed();
 			StatusText = Tx.T("statusbar.n files loaded", filesToLoad.Count) + Tx.T("statusbar.n text keys defined", TextKeys.Count);
-			FileModified = false;
+            RootTextKey.HasUnsavedChanges = false;
             UpdateTitle();
 			ClearViewHistory();
 			CheckNotifyReadonlyFiles();
@@ -896,8 +875,7 @@ namespace Unclassified.TxEditor.ViewModels
 
             RootTextKey.Serializer = serializer;
             RootTextKey.Location = location;
-
-            UpdateTitle();
+		    RootTextKey.HasUnsavedChanges = false;
 			StatusText = Tx.T("statusbar.file saved");
 			return true;
 		}
@@ -934,7 +912,7 @@ namespace Unclassified.TxEditor.ViewModels
 		    SortCulturesInTextKey(RootTextKey);
 		    ValidateTextKeysDelayed();
 		    StatusText = Tx.T("statusbar.n files imported", successfullyImportedFiles.Length) + Tx.T("statusbar.n text keys defined", TextKeys.Count);
-		    FileModified = true;
+            RootTextKey.HasUnsavedChanges = true;
 		}
 
 		private bool CanExportKeys()
@@ -984,7 +962,7 @@ namespace Unclassified.TxEditor.ViewModels
 		    // Make the very first culture the primary culture by default
 		    if (LoadedCultureNames.Count == 1) PrimaryCulture = ci.IetfLanguageTag;
 
-		    FileModified = true;
+            RootTextKey.HasUnsavedChanges = true;
 		    StatusText = Tx.T("statusbar.culture added", "name", CultureInfoName(ci));
 		}
 
@@ -1001,7 +979,7 @@ namespace Unclassified.TxEditor.ViewModels
 			{
 				DeleteCulture(RootTextKey, SelectedCulture, true);
 				StatusText = Tx.T("statusbar.culture deleted", "name", CultureInfoName(ci));
-				FileModified = true;
+                RootTextKey.HasUnsavedChanges = true;
 			}
 		}
 
@@ -1063,7 +1041,7 @@ namespace Unclassified.TxEditor.ViewModels
 				PrimaryCulture = SelectedCulture;
 				SortCulturesInTextKey(RootTextKey);
 				ValidateTextKeysDelayed();
-				FileModified = true;
+                RootTextKey.HasUnsavedChanges = true;
 				StatusText = Tx.T("statusbar.primary culture set", "name", CultureInfoName(ci));
 				SetPrimaryCultureCommand.RaiseCanExecuteChanged();
 			}
@@ -1117,7 +1095,7 @@ namespace Unclassified.TxEditor.ViewModels
 				tk.UpdateCultureTextSeparators();
 
 				ValidateTextKeysDelayed();
-				FileModified = true;
+                RootTextKey.HasUnsavedChanges = true;
 
 				bool wasExpanded = tk.IsExpanded;
 				tk.IsExpanded = true;   // Expands all parents
@@ -1232,7 +1210,7 @@ namespace Unclassified.TxEditor.ViewModels
 					DeletePartialParentKeys(tk.Parent as TextKeyViewModel);
 					if (tk.Parent.Children.Contains(tk))
 						isAnySelectedRemaining = true;
-					FileModified = true;
+                    RootTextKey.HasUnsavedChanges = true;
 				}
 				if (!isAnySelectedRemaining)
 				{
@@ -1505,7 +1483,7 @@ namespace Unclassified.TxEditor.ViewModels
 			tk.CultureTextVMs[0].Text = text;
 
 			ValidateTextKeysDelayed();
-			FileModified = true;
+            RootTextKey.HasUnsavedChanges = true;
 
 			if (alreadyExists)
 			{
@@ -1694,7 +1672,7 @@ namespace Unclassified.TxEditor.ViewModels
 					DeletePartialParentKeys(oldParent as TextKeyViewModel);
 				}
 
-				FileModified = true;
+                RootTextKey.HasUnsavedChanges = true;
 				StatusText = Tx.T("statusbar.text keys renamed", affectedKeyCount);
 
 				// Fix an issue with MultiSelectTreeView: It can only know that an item is selected
@@ -1843,7 +1821,7 @@ namespace Unclassified.TxEditor.ViewModels
 					}
 				}
 
-				FileModified = true;
+                RootTextKey.HasUnsavedChanges = true;
 				StatusText = Tx.T("statusbar.text keys duplicated", affectedKeys);
 
 				destKey.IsSelected = true;
@@ -2012,7 +1990,7 @@ namespace Unclassified.TxEditor.ViewModels
 			selKey.Parent.Children.Remove(selKey);
 			selKey.Parent.Children.InsertSorted(selKey, TextKeyViewModel.Compare);
 
-			FileModified = true;
+            RootTextKey.HasUnsavedChanges = true;
 			StatusText = Tx.T("statusbar.text key converted to namespace");
 
 			ViewCommandManager.InvokeLoaded("SelectTextKey", selKey);
@@ -2042,7 +2020,7 @@ namespace Unclassified.TxEditor.ViewModels
 			selKey.Parent.Children.Remove(selKey);
 			selKey.Parent.Children.InsertSorted(selKey, TextKeyViewModel.Compare);
 
-			FileModified = true;
+            RootTextKey.HasUnsavedChanges = true;
 			StatusText = Tx.T("statusbar.namespace converted to text key");
 
 			ViewCommandManager.InvokeLoaded("SelectTextKey", selKey);
@@ -2110,7 +2088,7 @@ namespace Unclassified.TxEditor.ViewModels
 			}
 			ValidateTextKeysDelayed();
 			StatusText = Tx.T("statusbar.n files loaded", count) + Tx.T("statusbar.n text keys defined", TextKeys.Count);
-			FileModified = false;
+            RootTextKey.HasUnsavedChanges = false;
 			// CheckNotifyReadonlyFiles will be called with the InitCommand
 		}
         
@@ -2617,7 +2595,7 @@ namespace Unclassified.TxEditor.ViewModels
 
 		    ComposeKeys(culture, existingCulture.Keys);
 
-		    FileModified = true;
+            RootTextKey.HasUnsavedChanges = true;
 		    StatusText = Tx.T("statusbar.system keys added", "culture", culture);
 
 		    if (culture.Length == 5) App.InformationMessage(Tx.T("msg.insert system keys.base culture", "name", culture.Substring(0, 2)));
@@ -3315,11 +3293,24 @@ namespace Unclassified.TxEditor.ViewModels
 			}
 		}
 
-		#endregion Suggestions
+        #endregion Suggestions
 
-		#region IViewCommandSource members
 
-		private ViewCommandManager viewCommandManager = new ViewCommandManager();
+        #region Public methods
+
+        public void ModelWasChanged(RootKeyViewModel rootKeyViewModel)
+        {
+            if (!dateTimeWindow.IsClosed()) dateTimeWindow.UpdateView();
+
+            UpdateTitle();
+            SaveCommand.RaiseCanExecuteChanged();
+        }
+
+        #endregion
+
+        #region IViewCommandSource members
+
+        private ViewCommandManager viewCommandManager = new ViewCommandManager();
 		public ViewCommandManager ViewCommandManager { get { return viewCommandManager; } }
 
 		#endregion IViewCommandSource members

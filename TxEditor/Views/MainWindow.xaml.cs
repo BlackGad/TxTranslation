@@ -75,12 +75,10 @@ namespace Unclassified.TxEditor.Views
 
 		private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs args)
 		{
-			MainViewModel vm = DataContext as MainViewModel;
-			if (vm != null && !vm.CheckModifiedSaved())
-			{
-				args.Cancel = true;
-				return;
-			}
+			var vm = DataContext as MainViewModel;
+		    if (vm == null || vm.CheckModifiedSaved()) return;
+
+		    args.Cancel = true;
 		}
 
 		private void Window_PreviewKeyDown(object sender, KeyEventArgs args)

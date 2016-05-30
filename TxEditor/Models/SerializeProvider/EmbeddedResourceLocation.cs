@@ -1,5 +1,6 @@
 using System;
 using System.Reflection;
+using System.Windows;
 using System.Xml;
 
 namespace Unclassified.TxEditor.Models
@@ -35,45 +36,23 @@ namespace Unclassified.TxEditor.Models
 
         #region ISerializeLocation Members
 
-        public void Backup()
-        {
-            if (!CanBackup()) throw new Exception(string.Format("Resource {0} could not be backed up.", Name));
-        }
-
-        public bool CanBackup()
-        {
-            return false;
-        }
-
-        public bool CanCleanBackup()
-        {
-            return false;
-        }
-
-        public bool CanLoad()
+        public Exception CanLoad()
         {
             var templateStream = Assembly.GetManifestResourceStream(Name);
-            return templateStream != null;
+            if (templateStream == null) throw new ResourceReferenceKeyNotFoundException();
+            return null;
         }
 
-        public bool CanRestore()
+        public Exception CanSave()
         {
-            return false;
-        }
-
-        public bool CanSave()
-        {
-            return false;
-        }
-
-        public void CleanBackup()
-        {
-            if (!CanCleanBackup()) throw new Exception(string.Format("Resource backup {0} could not be cleaned.", Name));
+            return new NotSupportedException();
         }
 
         public XmlDocument Load()
         {
-            if (!CanLoad()) throw new Exception(string.Format("Resource {0} could not be loaded.", Name));
+            var error = CanLoad();
+            if (error != null) throw new Exception(string.Format("Resource {0} could not be loaded.", Name), error);
+
             var templateStream = Assembly.GetManifestResourceStream(Name);
             if (templateStream == null)
                 throw new Exception(string.Format("The template dictionary {0} is not an embedded resource in {1} assembly. This is a build error.",
@@ -84,15 +63,15 @@ namespace Unclassified.TxEditor.Models
             return document;
         }
 
-        public void Restore()
+        public ISerializeLocationBackup QueryBackup()
         {
-            if (!CanRestore()) throw new Exception(string.Format("Resource {0} could not be restored.", Name));
+            return null;
         }
 
         public void Save(XmlDocument document)
         {
-            if (!CanSave()) throw new Exception(string.Format("Resource {0} could not be saved.", Name));
-            throw new NotSupportedException();
+            var error = CanSave();
+            if (error != null) throw new Exception(string.Format("Resource {0} could not be saved.", Name), error);
         }
 
         #endregion

@@ -1,3 +1,4 @@
+using System;
 using System.Xml;
 
 namespace Unclassified.TxEditor.Models
@@ -6,15 +7,13 @@ namespace Unclassified.TxEditor.Models
     {
         #region Members
 
-        void Backup();
-        bool CanBackup();
-        bool CanCleanBackup();
-        bool CanLoad();
-        bool CanRestore();
-        bool CanSave();
-        void CleanBackup();
+        Exception CanLoad();
+        Exception CanSave();
+
         XmlDocument Load();
-        void Restore();
+
+        ISerializeLocationBackup QueryBackup();
+
         void Save(XmlDocument document);
 
         #endregion

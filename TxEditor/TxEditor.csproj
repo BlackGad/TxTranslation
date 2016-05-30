@@ -93,11 +93,13 @@
     <Compile Include="Converters\UnicodeInfoConverter.cs" />
     <Compile Include="Exceptions.cs" />
     <Compile Include="FileNameHelper.cs" />
+    <Compile Include="Models\SerializeProvider\BackupProcessor.cs" />
     <Compile Include="Models\SerializeProvider\DeserializeInstruction.cs" />
     <Compile Include="Models\SerializeProvider\EmbeddedResourceLocation.cs" />
     <Compile Include="Models\SerializeProvider\FileLocation.cs" />
     <Compile Include="Models\SerializeProvider\ISerializeDescription.cs" />
     <Compile Include="Models\SerializeProvider\ISerializeLocation.cs" />
+    <Compile Include="Models\SerializeProvider\ISerializeLocationBackup.cs" />
     <Compile Include="Models\SerializeProvider\IVersionSerializer.cs" />
     <Compile Include="Models\SerializeProvider\IVersionSerializerDescription.cs" />
     <Compile Include="Models\SerializeProvider\Model\SerializedCulture.cs" />

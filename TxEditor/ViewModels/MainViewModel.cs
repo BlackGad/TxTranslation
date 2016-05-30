@@ -126,58 +126,36 @@ namespace Unclassified.TxEditor.ViewModels
                 return false;
             }
 
-            var failedSave = instructions.Where(i => !i.Location.CanSave()).BatchOperation(i=>i.Location.Save(null));
+	        try
+	        {
+	            var failedSave = instructions.BatchOperation(i =>
+	            {
+	                var error = i.Location.CanSave();
+	                if (error != null) throw error;
+	            }).ToList();
+	            if (failedSave.Any()) throw new AggregateException(failedSave);
 
-            foreach (var exception in failedSave)
-            {
-                App.ErrorMessage(string.Format("Cannot save \"{0}\".", exception.Instruction.Location), exception, "Saving file");
-                return false;
+	            using (var backupProcessor = new BackupProcessor(instructions))
+	            {
+	                var failedInstructions = instructions.BatchOperation(i => i.Serialize())
+	                                                     .Select(e => new Exception(string.Format("Cannot serialize \"{0}\"", e.Instruction.Location), e))
+	                                                     .ToList();
+	                if (failedInstructions.Any())
+	                {
+	                    App.ErrorMessage(string.Format("{0} save failed. Rolling back.", location),
+	                                     new AggregateException(failedInstructions),
+	                                     "Saving file");
+
+	                    backupProcessor.Restore();
+	                }
+	            }
+                return true;
             }
-
-            var hasObsoleteBackups = instructions.Where(i => i.Location.CanCleanBackup());
-            var failedObsoleteBackupCleaning = hasObsoleteBackups.BatchOperation(i => i.Location.CleanBackup());
-            foreach (var exception in failedObsoleteBackupCleaning)
-            {
-                App.ErrorMessage(string.Format("Cannot remove obsolete backup for \"{0}\".", exception.Instruction.Location), exception, "Saving file");
-                return false;
-            }
-
-            var willBeOverriden = instructions.Where(i => i.Location.CanLoad());
-            var failedBackup = willBeOverriden.BatchOperation(i => i.Location.Backup());
-            foreach (var exception in failedBackup)
-            {
-                App.ErrorMessage(string.Format("Cannot backup \"{0}\".", exception.Instruction.Location), exception, "Saving file");
-                return false;
-            }
-
-            var failedSerializations = instructions.BatchOperation(i => i.Serialize()).ToList();
-
-            foreach (var exception in failedSerializations)
-            {
-                //TODO: Show batch message
-                App.ErrorMessage(string.Format("Cannot serialize \"{0}\". Rolling back.", exception.Instruction.Location), exception, "Saving file");
-            }
-
-            if (failedSerializations.Any())
-            {
-                var restoreRequired = instructions.Where(i => i.Location.CanRestore());
-                var failedRestore = restoreRequired.BatchOperation(i => i.Location.Restore()).ToList();
-                foreach (var exception in failedRestore)
-                {
-                    //TODO: Show batch message
-                    App.ErrorMessage(string.Format("Cannot restore \"{0}\".", exception.Instruction.Location), exception, "Saving file");
-                }
-            }
-
-            var hasBackups = instructions.Where(i => i.Location.CanCleanBackup());
-            var failedBackupCleaning = hasBackups.BatchOperation(i => i.Location.CleanBackup());
-            foreach (var exception in failedBackupCleaning)
-            {
-                //TODO: Show batch message
-                App.ErrorMessage(string.Format("Cannot remove backup for \"{0}\".", exception.Instruction.Location), exception, "Saving file");
-            }
-
-            return !failedSerializations.Any();
+	        catch (Exception e)
+	        {
+	            App.ErrorMessage(string.Format("Cannot save \"{0}\".", location), e, "Saving file");
+	            return false;
+	        }
         }
 
         #endregion Static data

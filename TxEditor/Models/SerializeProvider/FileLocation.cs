@@ -2,7 +2,6 @@ using System;
 using System.IO;
 using System.Text;
 using System.Xml;
-using Unclassified.TxLib;
 
 namespace Unclassified.TxEditor.Models
 {
@@ -35,63 +34,25 @@ namespace Unclassified.TxEditor.Models
 
         #region ISerializeLocation Members
 
-        public void Backup()
-        {
-            if (!CanBackup()) throw new Exception(string.Format("File {0} could not be backed up.", Filename));
-            File.Copy(Filename, Filename + ".bak", true);
-        }
-
-        public bool CanBackup()
-        {
-            return CanLoad();
-        }
-
-        public bool CanCleanBackup()
-        {
-            return File.Exists(Filename + ".bak");
-        }
-
-        public bool CanLoad()
-        {
-            return File.Exists(Filename);
-        }
-
-        public bool CanRestore()
-        {
-            return File.Exists(Filename + ".bak");
-        }
-
-        public bool CanSave()
-        {
-            var fi = new FileInfo(Filename);
-            if (fi.Exists && fi.IsReadOnly) return false;
-            return true;
-        }
-
-        public void CleanBackup()
-        {
-            if (!CanCleanBackup()) throw new Exception(string.Format("File {0} backup could not be cleaned.", Filename));
-            File.Delete(Filename + ".bak");
-        }
-
         public XmlDocument Load()
         {
-            if (!CanLoad()) throw new Exception(string.Format("File {0} could not be loaded.", Filename));
+            var error = CanLoad();
+            if (error != null) throw new Exception(string.Format("File {0} could not be loaded.", Filename), error);
 
             var document = new XmlDocument();
             document.Load(Filename);
             return document;
         }
 
-        public void Restore()
+        public ISerializeLocationBackup QueryBackup()
         {
-            if (!CanRestore()) throw new Exception(string.Format("File {0} could not be restored.", Filename));
-            File.Copy(Filename + ".bak", Filename, true);
+            return new LocationBackup(this);
         }
 
         public void Save(XmlDocument document)
         {
-            if (!CanSave()) throw new Exception(string.Format("File {0} could not be saved.", Filename));
+            var error = CanSave();
+            if (error != null) throw new Exception(string.Format("File could not be saved.", Filename), error);
 
             if (document == null) throw new ArgumentNullException(nameof(document));
             var xws = new XmlWriterSettings
@@ -109,6 +70,82 @@ namespace Unclassified.TxEditor.Models
 
             File.Delete(Filename);
             File.Move(Filename + ".tmp", Filename);
+        }
+
+        public Exception CanLoad()
+        {
+            if (!File.Exists(Filename)) return new FileNotFoundException(null, Filename);
+            return null;
+        }
+
+        public Exception CanSave()
+        {
+            var fi = new FileInfo(Filename);
+            if (fi.Exists && fi.IsReadOnly) return new Exception(string.Format("Target file {0} is read only.", Filename));
+            return null;
+        }
+
+        #endregion
+
+        #region Nested type: LocationBackup
+
+        class LocationBackup : ISerializeLocationBackup
+        {
+            private readonly FileLocation _location;
+
+            #region Constructors
+
+            public LocationBackup(FileLocation location)
+            {
+                _location = location;
+            }
+
+            #endregion
+
+            #region ISerializeLocationBackup Members
+
+            public void Backup()
+            {
+                var error = CanBackup();
+                if (error != null) throw new Exception(string.Format("File {0} could not be backed up.", _location.Filename), error);
+                File.Copy(_location.Filename, _location.Filename + ".bak", true);
+            }
+
+            public Exception CanBackup()
+            {
+                return _location.CanLoad();
+            }
+
+            public Exception CanCleanBackup()
+            {
+                var filename = _location.Filename + ".bak";
+                if (!File.Exists(filename)) return new FileNotFoundException(null, filename);
+                return null;
+            }
+
+            public Exception CanRestore()
+            {
+                var filename = _location.Filename + ".bak";
+                if (!File.Exists(filename)) return new FileNotFoundException(null, filename);
+                return null;
+            }
+
+            public void CleanBackup()
+            {
+                var error = CanCleanBackup();
+                if (error != null) throw new Exception(string.Format("File {0} backup could not be cleaned.", _location.Filename), error);
+                File.Delete(_location.Filename + ".bak");
+            }
+
+            public void Restore()
+            {
+                var error = CanRestore();
+                if (error != null) throw new Exception(string.Format("File {0} could not be restored.", _location.Filename), error);
+
+                File.Copy(_location.Filename + ".bak", _location.Filename, true);
+            }
+
+            #endregion
         }
 
         #endregion

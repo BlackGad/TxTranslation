@@ -921,7 +921,10 @@ namespace Unclassified.TxEditor.Views
 			suggestions.Clear();
 			if (!String.IsNullOrEmpty(TranslationText.Text))
 			{
-				ScanAllTexts(MainViewModel.Instance.RootTextKey);
+			    foreach (var root in MainViewModel.Instance.RootKeys)
+			    {
+                    ScanAllTexts(root);
+                }
 			}
 			bool havePreviousTextKey = !String.IsNullOrEmpty(prevTextKey);
 			bool haveOtherKeys = suggestions.Count > 0;
@@ -1014,7 +1017,7 @@ namespace Unclassified.TxEditor.Views
 					suggestions.Add(new SuggestionViewModel(null) { TextKey = tk.TextKey, BaseText = tk.CultureTextVMs[0].Text, ScoreNum = score });
 				}
 			}
-			foreach (TextKeyViewModel child in tk.Children)
+			foreach (TextKeyViewModel child in tk.Children.Enumerate<TextKeyViewModel>())
 			{
 				ScanAllTexts(child);
 			}

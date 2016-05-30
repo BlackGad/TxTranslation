@@ -12,8 +12,8 @@ namespace Unclassified.TxEditor.UI
         internal static TreeViewItemViewModel FindAncestor(this TreeViewItemViewModel vm,
                                                            Func<TreeViewItemViewModel, bool> predicate)
         {
-            if (vm == null) throw new ArgumentNullException(nameof(vm));
-            if (predicate == null) throw new ArgumentNullException(nameof(predicate));
+            if (vm == null) return null;
+            predicate = predicate ?? (a => true);
 
             var model = vm.Parent;
             while (model != null)
@@ -25,13 +25,20 @@ namespace Unclassified.TxEditor.UI
             return null;
         }
 
+        internal static RootKeyViewModel FindRoot(this TreeViewItemViewModel key)
+        {
+            Func<TreeViewItemViewModel, bool> predicate = vm => vm is RootKeyViewModel;
+            if (predicate(key)) return key as RootKeyViewModel;
+            return key.FindAncestor(predicate) as RootKeyViewModel;
+        }
+
         internal static IEnumerable<TreeViewItemViewModel> FindViewModels(this TreeViewItemViewModel vm,
                                                                           Action<ItemSearchEventArgs<TreeViewItemViewModel>> searchArgs)
         {
-            if (vm == null) throw new ArgumentNullException(nameof(vm));
-            if (searchArgs == null) throw new ArgumentNullException("searchArgs");
-
             var result = new List<TreeViewItemViewModel>();
+            searchArgs = searchArgs ?? (args => { });
+            if (vm == null) return result;
+
             foreach (var child in vm.Children)
             {
                 var args = new ItemSearchEventArgs<TreeViewItemViewModel>(child);
@@ -41,7 +48,6 @@ namespace Unclassified.TxEditor.UI
                 if (args.MarkForDeeperSearch) result.AddRange(FindViewModels(child, searchArgs));
                 if (args.BreakCurrentDepthSearch) break;
             }
-
             return result;
         }
 

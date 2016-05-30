@@ -97,7 +97,7 @@ namespace Unclassified.TxEditor.Views
 			try
 			{
 				// Copy the Tx:* keys from the loaded dictionary file into TxLib and restore them later
-				Tx.ReplaceSystemTexts(MainViewModel.Instance.GetSystemTexts());
+				Tx.ReplaceSystemTexts(MainViewModel.Instance.GetSystemTexts(MainViewModel.Instance.GetSelectedRoot()));
 
 				Thread.CurrentThread.CurrentCulture = new CultureInfo(culture);
 

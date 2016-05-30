@@ -186,8 +186,8 @@ namespace Unclassified.TxEditor.ViewModels
 		{
 			get
 			{
-                var rootModel = this.FindAncestor(a => a is RootKeyViewModel) as RootKeyViewModel;
-                return rootModel?.IsTemplate != true && TextKey.StartsWith("Tx:");
+                var root = this.FindRoot();
+                return root?.IsTemplate != true && TextKey.StartsWith("Tx:");
 			}
 		}
 
@@ -235,9 +235,9 @@ namespace Unclassified.TxEditor.ViewModels
         /// </summary>
         public void ModelWasChanged()
         {
-            var rootKey = this.FindAncestor(t => t is RootKeyViewModel) as RootKeyViewModel;
-            if (rootKey == null) throw new InvalidOperationException();
-            rootKey.HasUnsavedChanges = true;
+            var root = this.FindRoot();
+            if (root == null) throw new InvalidOperationException();
+            root.HasUnsavedChanges = true;
         }
 
         /// <summary>
@@ -600,7 +600,7 @@ namespace Unclassified.TxEditor.ViewModels
 			}
 		}
 
-		public void UpdateIcon()
+		public virtual void UpdateIcon()
 		{
 			if (IsNamespace)
 			{

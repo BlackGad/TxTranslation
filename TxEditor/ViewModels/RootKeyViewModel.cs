@@ -13,6 +13,7 @@ namespace Unclassified.TxEditor.ViewModels
         public RootKeyViewModel(MainViewModel mainWindowVm)
             : base(null, false, null, mainWindowVm)
         {
+            
         }
 
         #endregion
@@ -27,6 +28,11 @@ namespace Unclassified.TxEditor.ViewModels
                 _hasUnsavedChanges = value;
                 MainWindowVM.ModelWasChanged(this);
             }
+        }
+
+        public override void UpdateIcon()
+        {
+            ImageSource = "/Images/lightbulb_green.png";
         }
 
         public bool IsTemplate { get; set; }

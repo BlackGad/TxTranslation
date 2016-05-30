@@ -553,7 +553,7 @@
 			<Controls:MultiSelectTreeView
 				Name="TextKeysTreeView"
 				Grid.Row="0" Grid.Column="0"
-				ItemsSource="{Binding RootTextKey.VisibleChildren}"
+				ItemsSource="{Binding RootKeys}"
 				BorderThickness="0"
 				UseLayoutRounding="False"
 				SelectionChanged="TextKeysTreeView_SelectionChanged"
@@ -612,6 +612,23 @@
 				</Controls:MultiSelectTreeView.ItemContainerStyle>
 
 				<Controls:MultiSelectTreeView.Resources>
+                    
+                    <HierarchicalDataTemplate DataType="{x:Type vm:RootKeyViewModel}" ItemsSource="{Binding VisibleChildren}">
+						<StackPanel Orientation="Horizontal">
+							<Image Name="icon" Width="16" Height="16" Margin="0,0,2,0" Source="{Binding ImageSource}"/>
+							<ContentControl Margin="0,0,2,0" Focusable="False">
+								<ContentControl.Content>
+									<MultiBinding Converter="{StaticResource textHighlightConverter}">
+										<MultiBinding.Bindings>
+											<Binding Path="DisplayName" Mode="OneWay"/>
+											<Binding Path="Text" ElementName="SearchText" Mode="OneWay"/>
+										</MultiBinding.Bindings>
+									</MultiBinding>
+								</ContentControl.Content>
+							</ContentControl>
+						</StackPanel>
+					</HierarchicalDataTemplate>
+                    
 					<HierarchicalDataTemplate DataType="{x:Type vm:TextKeyViewModel}" ItemsSource="{Binding VisibleChildren}">
 						<StackPanel Orientation="Horizontal">
 							<Image Name="icon" Width="16" Height="16" Margin="0,0,2,0" Source="{Binding ImageSource}"/>

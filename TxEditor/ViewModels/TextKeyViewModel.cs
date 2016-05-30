@@ -190,7 +190,7 @@ namespace Unclassified.TxEditor.ViewModels
 			get
 			{
                 var rootModel = this.FindAncestor(a => a is RootKeyViewModel) as RootKeyViewModel;
-                return rootModel?.IsTemplateFile != true && TextKey.StartsWith("Tx:");
+                return rootModel?.IsTemplate != true && TextKey.StartsWith("Tx:");
 			}
 		}
 

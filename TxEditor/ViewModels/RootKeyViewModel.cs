@@ -19,7 +19,7 @@ namespace Unclassified.TxEditor.ViewModels
         #region Properties
 
         public bool HasUnsavedChanges { get; set; }
-        public bool IsTemplateFile { get; set; }
+        public bool IsTemplate { get; set; }
 
         public ISerializeLocation Location { get; set; }
 
@@ -46,7 +46,7 @@ namespace Unclassified.TxEditor.ViewModels
         public void Reset()
         {
             Children.Clear();
-            IsTemplateFile = false;
+            IsTemplate = false;
             Location = null;
             Serializer = null;
             HasUnsavedChanges = false;

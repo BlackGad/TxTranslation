@@ -47,7 +47,7 @@ namespace Unclassified.TxEditor.ViewModels
                                                                IsPrimary = Equals(name, mainModel.PrimaryCulture)
                                                            });
 
-            var primaryCulture = cultures[mainModel.PrimaryCulture];
+            var primaryCulture = mainModel.PrimaryCulture != null ? cultures[mainModel.PrimaryCulture] : cultures.Values.FirstOrDefault();
 
             foreach (var textKeyViewModel in modelsWithKeys)
             {
@@ -100,7 +100,7 @@ namespace Unclassified.TxEditor.ViewModels
             var rootModel = model.FindAncestor(a => a is RootKeyViewModel) as RootKeyViewModel;
             return new SerializedTranslation
             {
-                IsTemplate = rootModel?.IsTemplateFile == true,
+                IsTemplate = rootModel?.IsTemplate == true,
                 Cultures = cultures.Values.ToList()
             };
         }
@@ -123,6 +123,14 @@ namespace Unclassified.TxEditor.ViewModels
             catch
             {
                 App.ErrorMessage(Tx.T("msg.cannot save unsupported file version", "ver", serializer.Name));
+                return false;
+            }
+
+            var failedSave = instructions.Where(i => !i.Location.CanSave()).BatchOperation(i=>i.Location.Save(null));
+
+            foreach (var exception in failedSave)
+            {
+                App.ErrorMessage(string.Format("Cannot save \"{0}\".", exception.Instruction.Location), exception, "Saving file");
                 return false;
             }
 
@@ -2199,7 +2207,7 @@ namespace Unclassified.TxEditor.ViewModels
             }
 
             // Don't mix template and non-template files (not relevant when importing a file)
-            if (translation.IsTemplate && !RootTextKey.IsTemplateFile && LoadedCultureNames.Count > 0 || !translation.IsTemplate && RootTextKey.IsTemplateFile)
+            if (translation.IsTemplate && !RootTextKey.IsTemplate && LoadedCultureNames.Count > 0 || !translation.IsTemplate && RootTextKey.IsTemplate)
             {
                 FL.Warning("Trying to mix template and non-template files on loading");
                 var result = TaskDialog.Show(
@@ -2213,7 +2221,7 @@ namespace Unclassified.TxEditor.ViewModels
 
                 return result.CustomButtonResult == 0;
             }
-            RootTextKey.IsTemplateFile = translation.IsTemplate;
+            RootTextKey.IsTemplate = translation.IsTemplate;
 
 
             foreach (var culture in translation.Cultures.Enumerate())

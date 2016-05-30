@@ -54,32 +54,39 @@ namespace Unclassified.TxEditor.Models
 
         public IEnumerable<DetectedTranslation> DetectUniqueTranslations(string folder)
         {
-            var processedFiles = new HashSet<string>();
+            var locations = new List<ISerializeLocation>();
             foreach (var file in PathHelper.EnumerateFiles(folder.TrimEnd('\\') + "\\"))
             {
                 var localFile = file.ToLowerInvariant();
-                if (processedFiles.Contains(localFile)) continue;
-
                 var extension = Path.GetExtension(localFile).ToLowerInvariant();
                 if (string.IsNullOrEmpty(extension)) continue;
-                if (extension.EndsWith(".xml") || extension.EndsWith(".txd"))
-                {
-                    var location = new FileLocation(localFile);
-                    var serializer = (IVersionSerializer)DetectSerializer(location);
-                    if (serializer == null) continue;
+                if (extension.EndsWith(".xml") || extension.EndsWith(".txd")) locations.Add(new FileLocation(localFile));
+            }
 
-                    var instructions = serializer.DetectRelatedLocations(location)
-                                                 .OfType<FileLocation>()
-                                                 .Select(fileLocation => serializer.Deserialize(fileLocation))
-                                                 .ToArray();
+            return DetectUniqueTranslations(locations.ToArray());
+        }
 
-                    foreach (var instruction in instructions)
-                    {
-                        processedFiles.Add(((FileLocation)instruction.Location).Filename);
-                    }
+        public IEnumerable<DetectedTranslation> DetectUniqueTranslations(params ISerializeLocation[] locations)
+        {
+            var processed = new HashSet<ISerializeLocation>();
+            var available = new HashSet<ISerializeLocation>(locations);
 
-                    yield return new DetectedTranslation(serializer.DescribeLocation(location), instructions);
-                }
+            foreach (var location in locations)
+            {
+                if (processed.Contains(location)) continue;
+
+                var serializer = (IVersionSerializer)DetectSerializer(location);
+                if (serializer == null) continue;
+
+                var relatedFromAvailable = serializer.DetectRelatedLocations(location)
+                                                     .Where(l => available.Contains(l))
+                                                     .ToList();
+
+                relatedFromAvailable.ForEach(l => processed.Add(l));
+
+                var instructions = relatedFromAvailable.Select(l => serializer.Deserialize(l)).ToArray();
+
+                yield return new DetectedTranslation(serializer.DescribeLocation(location), instructions);
             }
         }
 

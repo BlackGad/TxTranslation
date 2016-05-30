@@ -1,10 +1,11 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using Unclassified.Util;
 
 namespace Unclassified.TxEditor.Models
 {
-    public static class SerializeInstructionExtensions
+    public static class SerializeExtensions
     {
         #region Static members
 

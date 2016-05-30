@@ -23,5 +23,20 @@
         public string Text { get; set; }
 
         #endregion
+
+        #region Members
+
+        public int GetUniqueHash()
+        {
+            unchecked
+            {
+                var hashCode = Count;
+                hashCode = (hashCode*397) ^ (Key != null ? Key.GetHashCode() : 0);
+                hashCode = (hashCode*397) ^ Modulo;
+                return hashCode;
+            }
+        }
+
+        #endregion
     }
 }

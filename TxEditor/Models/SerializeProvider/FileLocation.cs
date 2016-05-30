@@ -7,12 +7,26 @@ namespace Unclassified.TxEditor.Models
 {
     public class FileLocation : ISerializeLocation
     {
+        #region Static members
+
+        public static bool operator ==(FileLocation left, FileLocation right)
+        {
+            return Equals(left, right);
+        }
+
+        public static bool operator !=(FileLocation left, FileLocation right)
+        {
+            return !Equals(left, right);
+        }
+
+        #endregion
+
         #region Constructors
 
         public FileLocation(string filename)
         {
             if (string.IsNullOrEmpty(filename)) throw new ArgumentNullException(nameof(filename));
-            Filename = filename;
+            Filename = filename.ToLowerInvariant();
         }
 
         #endregion
@@ -30,9 +44,27 @@ namespace Unclassified.TxEditor.Models
             return Filename;
         }
 
+        public override bool Equals(object obj)
+        {
+            if (ReferenceEquals(null, obj)) return false;
+            if (ReferenceEquals(this, obj)) return true;
+            if (obj.GetType() != GetType()) return false;
+            return Equals((FileLocation)obj);
+        }
+
+        public override int GetHashCode()
+        {
+            return Filename != null ? Filename.GetHashCode() : 0;
+        }
+
         #endregion
 
         #region ISerializeLocation Members
+
+        public bool Equals(ISerializeLocation other)
+        {
+            return Equals(other as FileLocation);
+        }
 
         public XmlDocument Load()
         {
@@ -83,6 +115,15 @@ namespace Unclassified.TxEditor.Models
             var fi = new FileInfo(Filename);
             if (fi.Exists && fi.IsReadOnly) return new Exception(string.Format("Target file {0} is read only.", Filename));
             return null;
+        }
+
+        #endregion
+
+        #region Members
+
+        protected bool Equals(FileLocation other)
+        {
+            return string.Equals(Filename, other.Filename);
         }
 
         #endregion

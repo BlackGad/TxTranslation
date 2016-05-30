@@ -105,64 +105,10 @@ namespace Unclassified.TxEditor.ViewModels
             };
         }
 
-	    /// <summary>
-	    ///     Writes all loaded text keys to a location.
-	    /// </summary>
-	    /// <param name="serializer">Selected serializer.</param>
-	    /// <param name="location">Target location.</param>
-	    /// <param name="translation">Translation to save.</param>
-	    /// <returns>true, if the file was saved successfully, false otherwise.</returns>
-	    public static bool SaveTo(SerializedTranslation translation, IVersionSerializerDescription serializer, ISerializeLocation location)
-        {
-            serializer = serializer ?? SerializeProvider.Instance.Version2;
-            SerializeInstruction[] instructions;
-            try
-            {
-                instructions = SerializeProvider.Instance.SaveTo(translation, location, serializer);
-            }
-            catch
-            {
-                App.ErrorMessage(Tx.T("msg.cannot save unsupported file version", "ver", serializer.Name));
-                return false;
-            }
-
-	        try
-	        {
-	            var failedSave = instructions.BatchOperation(i =>
-	            {
-	                var error = i.Location.CanSave();
-	                if (error != null) throw error;
-	            }).ToList();
-	            if (failedSave.Any()) throw new AggregateException(failedSave);
-
-	            using (var backupProcessor = new BackupProcessor(instructions))
-	            {
-	                var failedInstructions = instructions.BatchOperation(i => i.Serialize())
-	                                                     .Select(e => new Exception(string.Format("Cannot serialize \"{0}\"", e.Instruction.Location), e))
-	                                                     .ToList();
-	                if (failedInstructions.Any())
-	                {
-	                    App.ErrorMessage(string.Format("{0} save failed. Rolling back.", location),
-	                                     new AggregateException(failedInstructions),
-	                                     "Saving file");
-
-	                    backupProcessor.Restore();
-	                }
-	            }
-                return true;
-            }
-	        catch (Exception e)
-	        {
-	            App.ErrorMessage(string.Format("Cannot save \"{0}\".", location), e, "Saving file");
-	            return false;
-	        }
-        }
-
         #endregion Static data
 
         #region Private data
 
-        private int readonlyFilesCount;
 		private List<TextKeyViewModel> selectedTextKeys;
 		private List<TextKeyViewModel> viewHistory = new List<TextKeyViewModel>();
 		private int viewHistoryIndex;
@@ -581,7 +527,6 @@ namespace Unclassified.TxEditor.ViewModels
 		{
 			if (!CheckModifiedSaved()) return;
 
-			ClearReadonlyFiles();
 			var folderDlg = new OpenFolderDialog();
 			folderDlg.Title = Tx.T("msg.load folder.title");
 			if (folderDlg.ShowDialog(new Wpf32Window(MainWindow.Instance)) == true)
@@ -658,14 +603,12 @@ namespace Unclassified.TxEditor.ViewModels
             RootTextKey.HasUnsavedChanges = false;
             UpdateTitle();
             ClearViewHistory();
-            CheckNotifyReadonlyFiles();
         }
 
 		private void OnLoadFile()
 		{
 			if (!CheckModifiedSaved()) return;
 
-			ClearReadonlyFiles();
 			var fileDlg = new OpenFileDialog();
 			fileDlg.CheckFileExists = true;
 			fileDlg.Filter = Tx.T("file filter.tx dictionary files") + " (*.txd)|*.txd|" +
@@ -736,7 +679,6 @@ namespace Unclassified.TxEditor.ViewModels
             RootTextKey.HasUnsavedChanges = false;
             UpdateTitle();
 			ClearViewHistory();
-			CheckNotifyReadonlyFiles();
 		}
 
 		private void OnSave()
@@ -849,7 +791,7 @@ namespace Unclassified.TxEditor.ViewModels
             var translation = DumpTranslation(RootTextKey);
 		    var location = newLocation ?? RootTextKey.Location;
 
-		    if (!SaveTo(translation, serializer, location)) return false;
+		    if (!App.SaveTo(translation, serializer, location)) return false;
 
             RootTextKey.Serializer = serializer;
             RootTextKey.Location = location;
@@ -919,7 +861,7 @@ namespace Unclassified.TxEditor.ViewModels
                 var translation = DumpTranslation(RootTextKey);
 			    translation.IsTemplate = false;
 
-			    if (SaveTo(translation, serializer, new FileLocation(dlg.FileName))) StatusText = Tx.T("statusbar.exported");
+			    if (App.SaveTo(translation, serializer, new FileLocation(dlg.FileName))) StatusText = Tx.T("statusbar.exported");
 			}
 		}
 
@@ -2040,10 +1982,11 @@ namespace Unclassified.TxEditor.ViewModels
 		public void LoadFiles(IEnumerable<string> fileNames)
 		{
 			OnNewFile();
-			int count = 0;
-			ClearReadonlyFiles();
+
+            int count = 0;
 			string prevPrimaryCulture = null;
 			List<string> primaryCultureFiles = new List<string>();
+
 			foreach (string _fileName in fileNames.Distinct())
 			{
 				var fileName = _fileName;
@@ -2057,7 +2000,7 @@ namespace Unclassified.TxEditor.ViewModels
 			}
 			if (primaryCultureFiles.Count > 1)
 			{
-				// Display a warning if multiple (and which) files claimed to be the primary culture, and which has won
+				//Display a warning if multiple (and which) files claimed to be the primary culture, and which has won
 				if (App.SplashScreen != null)
 				{
 					App.SplashScreen.Close(TimeSpan.Zero);
@@ -2067,9 +2010,8 @@ namespace Unclassified.TxEditor.ViewModels
 			ValidateTextKeysDelayed();
 			StatusText = Tx.T("statusbar.n files loaded", count) + Tx.T("statusbar.n text keys defined", TextKeys.Count);
             RootTextKey.HasUnsavedChanges = false;
-			// CheckNotifyReadonlyFiles will be called with the InitCommand
-		}
-        
+        }
+
         private bool ImportFromXmlFile(string fileName)
         {
             SerializedTranslation translation;
@@ -2128,18 +2070,11 @@ namespace Unclassified.TxEditor.ViewModels
             return true;
         }
 
-	    private bool LoadFrom(ISerializeLocation location)
+        private bool LoadFrom(ISerializeLocation location)
         {
-	        if (location is FileLocation)
-	        {
-                var fi = new FileInfo(((FileLocation)location).Filename);
-                if (fi.Exists && fi.IsReadOnly) SetReadonlyFiles();
-            }
-            
-
             SerializedTranslation translation;
-	        IVersionSerializerDescription serializer;
-	        try
+            IVersionSerializerDescription serializer;
+            try
             {
                 var serializeProvider = SerializeProvider.Instance;
 
@@ -2193,7 +2128,7 @@ namespace Unclassified.TxEditor.ViewModels
             return true;
         }
 
-	    private void ComposeKeys(string cultureName, IEnumerable<SerializedKey> keys)
+        private void ComposeKeys(string cultureName, IEnumerable<SerializedKey> keys)
 		{
             // Add the new culture everywhere
 	        if (!LoadedCultureNames.Contains(cultureName)) AddNewCulture(RootTextKey, cultureName, false);
@@ -2336,34 +2271,6 @@ namespace Unclassified.TxEditor.ViewModels
 				tk.IsFullKey = true;
 			}
 			return tk;
-		}
-
-		/// <summary>
-		/// Clears the flag about loaded files that are read-only.
-		/// </summary>
-		private void ClearReadonlyFiles()
-		{
-			readonlyFilesCount = 0;
-		}
-
-		/// <summary>
-		/// Sets the flag about loaded files that are read-only. Call CheckNotifyReadonlyFiles()
-		/// after loading all files to notify the user about read-only files.
-		/// </summary>
-		private void SetReadonlyFiles()
-		{
-			readonlyFilesCount++;
-		}
-
-		/// <summary>
-		/// Notifies the user about read-only files, if any were loaded.
-		/// </summary>
-		private void CheckNotifyReadonlyFiles()
-		{
-			if (readonlyFilesCount > 0)
-			{
-				App.WarningMessage(Tx.T("msg.read-only files loaded", readonlyFilesCount));
-			}
 		}
 
         #endregion XML loading methods
@@ -2718,8 +2625,6 @@ namespace Unclassified.TxEditor.ViewModels
 				// Work-around for implementation bug in SplashScreen.Close that steals the focus
 				MainWindow.Instance.Focus();
 			}
-
-			CheckNotifyReadonlyFiles();
 
 			if (!string.IsNullOrWhiteSpace(ScanDirectory))
 			{

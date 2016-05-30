@@ -109,7 +109,7 @@
     <Compile Include="Models\SerializeProvider\SerializeInstruction.cs" />
     <Compile Include="Models\SerializeProvider\DetectedTranslation.cs" />
     <Compile Include="Models\SerializeProvider\SerializeInstructionException.cs" />
-    <Compile Include="Models\SerializeProvider\SerializeInstructionExtensions.cs" />
+    <Compile Include="Models\SerializeProvider\SerializeExtensions.cs" />
     <Compile Include="Models\SerializeProvider\Versions\Version1Serializer.cs" />
     <Compile Include="Models\SerializeProvider\Versions\Version2Serializer.cs" />
     <Compile Include="Program.cs" />

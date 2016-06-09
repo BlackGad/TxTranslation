@@ -120,7 +120,7 @@ namespace Unclassified.TxEditor.ViewModels
 		{
 			Instance = this;
 
-			TextKeys = new Dictionary<string, TextKeyViewModel>();
+			TextKeys = new Dictionary<string, List<TextKeyViewModel>>();
 			LoadedCultureNames = new HashSet<string>();
 			DeletedCultureNames = new HashSet<string>();
             RootKeys = new ObservableCollection<RootKeyViewModel>();
@@ -145,7 +145,7 @@ namespace Unclassified.TxEditor.ViewModels
 		/// <summary>
 		/// Dictionary of all loaded text keys, associating a text key string with its TextKeyViewModel instance.
 		/// </summary>
-		public Dictionary<string, TextKeyViewModel> TextKeys { get; private set; }
+		public Dictionary<string, List<TextKeyViewModel>> TextKeys { get; private set; }
 		public HashSet<string> LoadedCultureNames { get; private set; }
 		public HashSet<string> DeletedCultureNames { get; private set; }
 		//public RootKeyViewModel RootTextKey { get; private set; }
@@ -1001,8 +1001,23 @@ namespace Unclassified.TxEditor.ViewModels
 		        }
 		    };
 
-		    var selectedKey = MainWindow.Instance.TextKeysTreeView.LastSelectedItem as TextKeyViewModel;
-		    if (selectedKey != null) win.TextKey = selectedKey.TextKey + (selectedKey.IsNamespace ? ":" : ".");
+		    win.RootItems.DisplayMemberPath = "DisplayName";
+
+            foreach (var rootKey in RootKeys)
+		    {
+                win.RootItems.Items.Add(rootKey);
+            }
+		    win.RootItems.Items.Add(new CreateNewTranslationObject());
+
+
+            var selectedKey = MainWindow.Instance.TextKeysTreeView.LastSelectedItem as TextKeyViewModel;
+		    if (selectedKey != null)
+		    {
+		        win.TextKey = selectedKey.TextKey + (selectedKey.IsNamespace ? ":" : ".");
+		        win.RootItems.SelectedItem = selectedKey.FindRoot();
+		    }
+
+		    win.RootItems.SelectedItem = win.RootItems.SelectedItem ?? win.RootItems.Items.Enumerate().FirstOrDefault();
 
             if (win.ShowDialog() != true) return;
 
@@ -1011,7 +1026,7 @@ namespace Unclassified.TxEditor.ViewModels
 		    TextKeyViewModel tk;
 		    try
 		    {
-		        tk = FindOrCreateTextKey(selectedKey.FindRoot(), newKey);
+		        tk = FindOrCreateTextKey(win.RootItems.SelectedItem as RootKeyViewModel, newKey);
 		    }
 		    catch (NonNamespaceExistsException)
 		    {
@@ -1192,7 +1207,8 @@ namespace Unclassified.TxEditor.ViewModels
 			}
 			if (tk.IsFullKey)
 			{
-				TextKeys.Remove(tk.TextKey);
+			    List<TextKeyViewModel> keys;
+			    if (TextKeys.TryGetValue(tk.TextKey, out keys)) keys.Remove(tk);
 				ProblemKeys.Remove(tk);
 			}
 			if (tk.Children.Count == 0)
@@ -1453,7 +1469,6 @@ namespace Unclassified.TxEditor.ViewModels
 		{
 			var selKey = MainWindow.Instance.TextKeysTreeView.LastSelectedItem as TextKeyViewModel;
 			if (selKey == null) return;   // No key selected, something is wrong
-		    var root = selKey.FindRoot();
 
 		    var win = new TextKeyWindow
 		    {
@@ -1471,7 +1486,18 @@ namespace Unclassified.TxEditor.ViewModels
 		        RenameSelectMode = true
 		    };
 
-		    if (selKey.Children.Count > 0)
+            win.RootItems.DisplayMemberPath = "DisplayName";
+
+            foreach (var rootKey in RootKeys)
+            {
+                win.RootItems.Items.Add(rootKey);
+            }
+
+            win.RootItems.Items.Add(new CreateNewTranslationObject());
+		    var selKeyRoot = selKey.FindRoot();
+		    win.RootItems.SelectedItem = selKeyRoot ?? win.RootItems.Items.Enumerate().FirstOrDefault();
+
+            if (selKey.Children.Count > 0)
 			{
 				// There are other keys below the selected key
 				// Initially indicate that all subkeys will also be renamed
@@ -1491,9 +1517,10 @@ namespace Unclassified.TxEditor.ViewModels
 			{
 				// The dialog was confirmed
 				string newKey = win.TextKey;
+                var newRoot = win.RootItems.SelectedItem as RootKeyViewModel;
 
-				// Was the name changed at all?
-				if (newKey == selKey.TextKey) return;
+                // Was the name changed at all?
+                if (newKey == selKey.TextKey && selKeyRoot == newRoot) return;
 
 				// Don't allow namespace nodes to be moved elsewhere
 				if (selKey.IsNamespace && (newKey.Contains('.') || newKey.Contains(':')))
@@ -1503,12 +1530,13 @@ namespace Unclassified.TxEditor.ViewModels
 				}
 
 				bool needDuplicateForChildren = win.IncludeSubitemsCheckbox.IsChecked == false && selKey.Children.Count > 0;
+                
 
-				// Test whether the entered text key already exists with content or subkeys
-				TextKeyViewModel tryDestKey;
+                // Test whether the entered text key already exists with content or subkeys
+                TextKeyViewModel tryDestKey;
 				try
 				{
-					tryDestKey = FindOrCreateTextKey(root, newKey, false, false);
+				    tryDestKey = FindOrCreateTextKey(newRoot, newKey, false, false);
 				}
 				catch (NonNamespaceExistsException)
 				{
@@ -1551,9 +1579,9 @@ namespace Unclassified.TxEditor.ViewModels
 				}
 
 				// Create the new text key if needed
-				var destKey = FindOrCreateTextKey(root, newKey, false);
-
-				if (!destExists)
+				var destKey = FindOrCreateTextKey(newRoot, newKey, false);
+			    newRoot = destKey.FindRoot();
+                if (!destExists)
 				{
 					// Key was entirely empty or is newly created.
 
@@ -1611,7 +1639,8 @@ namespace Unclassified.TxEditor.ViewModels
 					{
 						// The source key will be kept but is now no longer a full key
 						selKey.IsFullKey = false;
-						TextKeys.Remove(selKey.TextKey);
+                        List<TextKeyViewModel> keys;
+                        if (TextKeys.TryGetValue(selKey.TextKey, out keys)) keys.Remove(selKey);
 					}
 				}
 
@@ -1622,7 +1651,9 @@ namespace Unclassified.TxEditor.ViewModels
 					DeletePartialParentKeys(oldParent as TextKeyViewModel);
 				}
 
-                root.HasUnsavedChanges = true;
+			    selKeyRoot.HasUnsavedChanges = true;
+                newRoot.HasUnsavedChanges = true;
+
 				StatusText = Tx.T("statusbar.text keys renamed", affectedKeyCount);
 
 				// Fix an issue with MultiSelectTreeView: It can only know that an item is selected
@@ -1661,7 +1692,6 @@ namespace Unclassified.TxEditor.ViewModels
 		{
 			var selKey = MainWindow.Instance.TextKeysTreeView.LastSelectedItem as TextKeyViewModel;
 			if (selKey == null) return;   // No key selected, something is wrong
-		    var root = selKey.FindRoot();
 
 		    var win = new TextKeyWindow
 		    {
@@ -1679,7 +1709,17 @@ namespace Unclassified.TxEditor.ViewModels
 		        RenameSelectMode = true
 		    };
 
-		    if (selKey.Children.Count > 0)
+            win.RootItems.DisplayMemberPath = "DisplayName";
+
+            foreach (var rootKey in RootKeys)
+            {
+                win.RootItems.Items.Add(rootKey);
+            }
+
+            win.RootItems.Items.Add(new CreateNewTranslationObject());
+            win.RootItems.SelectedItem = selKey.FindRoot() ?? win.RootItems.Items.Enumerate().FirstOrDefault();
+
+            if (selKey.Children.Count > 0)
 			{
 				// There are other keys below the selected key
 				// Initially indicate that all subkeys will also be duplicated
@@ -1708,11 +1748,12 @@ namespace Unclassified.TxEditor.ViewModels
 					return;
 				}
 
-				// Test whether the entered text key already exists with content or subkeys
-				TextKeyViewModel tryDestKey;
+                var newRoot = win.RootItems.SelectedItem as RootKeyViewModel;
+                // Test whether the entered text key already exists with content or subkeys
+                TextKeyViewModel tryDestKey;
 				try
 				{
-					tryDestKey = FindOrCreateTextKey(root, newKey, false, false, selKey.IsNamespace);
+					tryDestKey = FindOrCreateTextKey(newRoot, newKey, false, false, selKey.IsNamespace);
 				}
 				catch (NonNamespaceExistsException)
 				{
@@ -1748,14 +1789,16 @@ namespace Unclassified.TxEditor.ViewModels
 				int affectedKeys = selKey.IsFullKey ? 1 : 0;
 
 				// Create the new text key if needed
-				TextKeyViewModel destKey = FindOrCreateTextKey(root, newKey, true, true, selKey.IsNamespace);
+				var destKey = FindOrCreateTextKey(newRoot, newKey, true, true, selKey.IsNamespace);
+			    newRoot = destKey.FindRoot();
 
-				// Restore original full key state first
-				destKey.IsFullKey = destWasFullKey;
+                // Restore original full key state first
+                destKey.IsFullKey = destWasFullKey;
 				if (!destWasFullKey && !selKey.IsFullKey)
 				{
-					TextKeys.Remove(destKey.TextKey);
-				}
+                    List<TextKeyViewModel> keys;
+                    if (TextKeys.TryGetValue(destKey.TextKey, out keys)) keys.Remove(destKey);
+                }
 				// Merge data into destKey, overwriting conflicts
 				destKey.MergeFrom(selKey);
 
@@ -1779,7 +1822,7 @@ namespace Unclassified.TxEditor.ViewModels
 					}
 				}
 
-                root.HasUnsavedChanges = true;
+                newRoot.HasUnsavedChanges = true;
 				StatusText = Tx.T("statusbar.text keys duplicated", affectedKeys);
 
 				destKey.IsSelected = true;
@@ -2236,9 +2279,13 @@ namespace Unclassified.TxEditor.ViewModels
 		{
 	        if (root == null)
 	        {
-                root = new RootKeyViewModel(this);
-	            root.DisplayName = "File key";
-                RootKeys.Add(root);
+	            if (!create) return null;
+
+                root = new RootKeyViewModel(this)
+	            {
+	                DisplayName = "Translation"
+	            };
+	            RootKeys.Add(root);
 	        }
             
             // Tokenize text key to find the tree node
@@ -2311,9 +2358,8 @@ namespace Unclassified.TxEditor.ViewModels
 
 			if (create)
 			{
-				if (updateTextKeys && !TextKeys.ContainsKey(textKey))
-					TextKeys.Add(textKey, tk);
-				tk.IsFullKey = true;
+			    if (updateTextKeys) TextKeys.GetOrAdd(textKey, k => new List<TextKeyViewModel>()).Ensure(tk);
+			    tk.IsFullKey = true;
 			}
 			return tk;
 		}
@@ -2531,15 +2577,6 @@ namespace Unclassified.TxEditor.ViewModels
 				ViewCommandManager.InvokeLoaded("SelectTextKey", tk);
 			else
 				ViewCommandManager.Invoke("SelectTextKey", tk);
-		}
-
-		private void SelectTextKey(string textKey, bool async = false)
-		{
-			TextKeyViewModel tk;
-			if (TextKeys.TryGetValue(textKey, out tk))
-			{
-				SelectTextKey(tk, async);
-			}
 		}
 
 		private void SelectCultureText(TextKeyViewModel tk, string cultureName)
@@ -3093,71 +3130,74 @@ namespace Unclassified.TxEditor.ViewModels
 			Dictionary<TextKeyViewModel, float> otherKeys = new Dictionary<TextKeyViewModel, float>();
 			foreach (var kvp in TextKeys)
 			{
-				if (kvp.Value.TextKey == tk.TextKey) continue;   // Skip currently selected item
-				if (kvp.Value.TextKey.StartsWith("Tx:")) continue;   // Skip system keys
-
 				float score = 0;
 				bool isExactMatch = false;
-				string otherBaseText = kvp.Value.CultureTextVMs[0].Text;
-				string otherTranslatedText = kvp.Value.CultureTextVMs.First(ct => ct.CultureName == LastSelectedCulture).Text;
+			    foreach (var vm in kvp.Value)
+			    {
+                    if (vm.TextKey == tk.TextKey) continue;   // Skip currently selected item
+                    if (vm.TextKey.StartsWith("Tx:")) continue;   // Skip system keys
 
-				if (string.IsNullOrEmpty(otherBaseText)) continue;
-				if (string.IsNullOrEmpty(otherTranslatedText)) continue;
+                    string otherBaseText = vm.CultureTextVMs[0].Text;
+			        string otherTranslatedText = vm.CultureTextVMs.First(ct => ct.CultureName == LastSelectedCulture).Text;
 
-				if (otherBaseText == origRefText)
-				{
-					// Both keys' primary translation matches exactly
-					isExactMatch = true;
-				}
+			        if (string.IsNullOrEmpty(otherBaseText)) continue;
+			        if (string.IsNullOrEmpty(otherTranslatedText)) continue;
 
-				// Remove all placeholders and key references
-				string otherText = Regex.Replace(otherBaseText, @"(?<!\{)\{[^{]*?\}", "");
+			        if (otherBaseText == origRefText)
+			        {
+			            // Both keys' primary translation matches exactly
+			            isExactMatch = true;
+			        }
 
-				// Extract all words
-				List<string> otherWords = new List<string>();
-				m = Regex.Match(otherText, @"(\w{2,})");
-				while (m.Success)
-				{
-					if (!commonWords.Contains(m.Groups[1].Value.ToLowerInvariant()))   // Skip common words
-						otherWords.Add(m.Groups[1].Value);
-					m = m.NextMatch();
-				}
+			        // Remove all placeholders and key references
+			        string otherText = Regex.Replace(otherBaseText, @"(?<!\{)\{[^{]*?\}", "");
 
-				// Increase score by 1 for each case-insensitively matching word
-				foreach (string word in refWords)
-				{
-					if (otherWords.Any(w => string.Equals(w, word, StringComparison.InvariantCultureIgnoreCase)))
-						score += 1;
-				}
-				// Increase score by 2 for each case-sensitively matching word
-				foreach (string word in refWords)
-				{
-					if (otherWords.Any(w => string.Equals(w, word, StringComparison.InvariantCulture)))
-						score += 2;
-				}
+			        // Extract all words
+			        List<string> otherWords = new List<string>();
+			        m = Regex.Match(otherText, @"(\w{2,})");
+			        while (m.Success)
+			        {
+			            if (!commonWords.Contains(m.Groups[1].Value.ToLowerInvariant()))   // Skip common words
+			                otherWords.Add(m.Groups[1].Value);
+			            m = m.NextMatch();
+			        }
 
-				// Divide by the square root of the number of relevant words. (Using the square
-				// root to reduce the effect for very long texts.)
-				if (otherWords.Count > 0)
-				{
-					score /= (float)Math.Sqrt(otherWords.Count);
-				}
-				else
-				{
-					// There are no significant words in the other text
-					score = 0;
-				}
+			        // Increase score by 1 for each case-insensitively matching word
+			        foreach (string word in refWords)
+			        {
+			            if (otherWords.Any(w => string.Equals(w, word, StringComparison.InvariantCultureIgnoreCase)))
+			                score += 1;
+			        }
+			        // Increase score by 2 for each case-sensitively matching word
+			        foreach (string word in refWords)
+			        {
+			            if (otherWords.Any(w => string.Equals(w, word, StringComparison.InvariantCulture)))
+			                score += 2;
+			        }
 
-				if (isExactMatch)
-				{
-					score = 100000;
-				}
+			        // Divide by the square root of the number of relevant words. (Using the square
+			        // root to reduce the effect for very long texts.)
+			        if (otherWords.Count > 0)
+			        {
+			            score /= (float)Math.Sqrt(otherWords.Count);
+			        }
+			        else
+			        {
+			            // There are no significant words in the other text
+			            score = 0;
+			        }
 
-				// Accept every text key with a threshold score
-				if (score >= 0.5f)
-				{
-					otherKeys.Add(kvp.Value, score);
-				}
+			        if (isExactMatch)
+			        {
+			            score = 100000;
+			        }
+
+			        // Accept every text key with a threshold score
+			        if (score >= 0.5f)
+			        {
+			            otherKeys.Add(vm, score);
+			        }
+			    }
 			}
 
 			// Sort all matches by their score
@@ -3221,5 +3261,13 @@ namespace Unclassified.TxEditor.ViewModels
 		public ViewCommandManager ViewCommandManager { get { return viewCommandManager; } }
 
 		#endregion IViewCommandSource members
+
+	    class CreateNewTranslationObject
+	    {
+	        public string DisplayName
+	        {
+	            get { return string.Format("New translation"); }
+	        } 
+	    }
 	}
 }

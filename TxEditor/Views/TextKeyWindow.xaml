@@ -34,20 +34,28 @@
 			</Grid.RowDefinitions>
 			<Grid.ColumnDefinitions>
 				<ColumnDefinition Width="Auto"/>
+				<ColumnDefinition Width="*" MinWidth="350"/>
 			</Grid.ColumnDefinitions>
 
 			<TextBlock
 				Name="CaptionLabel"
 				Grid.Row="0" Grid.Column="0"
+                Grid.ColumnSpan="2"
 				Text="CaptionLabel"/>
 
-			<TextBox
+			<ComboBox 
+                Grid.Row="1" Grid.Column="0"
+                Name="RootItems"
+				MinWidth="75" Margin="0,0,3,0"/>
+            
+            <TextBox
 				Name="TextKeyText"
-				Grid.Row="1" Grid.Column="0"
-				Width="350" Margin="0,6,0,0"
+				Grid.Row="1" Grid.Column="1"
+                HorizontalAlignment="Stretch"
 				ui:TextBoxExtensions.DisableInsertKey="True"/>
 
 			<CheckBox
+                Grid.ColumnSpan="2"
 				Name="IncludeSubitemsCheckbox"
 				Grid.Row="2" Grid.Column="0"
 				Margin="0,6,0,0" Visibility="Collapsed" HorizontalAlignment="Left"

@@ -315,10 +315,11 @@ namespace Unclassified.TxEditor.Views
 			}
 
 			// Check if the text key already exists but the translated text is different
-			TextKeyViewModel existingTextKeyVM;
-			if (MainViewModel.Instance.TextKeys.TryGetValue(textKey, out existingTextKeyVM))
+			//TextKeyViewModel existingTextKeyVM;
+		    List<TextKeyViewModel> existingTextKeyVMs;
+		    if (MainViewModel.Instance.TextKeys.TryGetValue(textKey, out existingTextKeyVMs))
 			{
-				if (translationString != existingTextKeyVM.CultureTextVMs[0].Text)
+				if (existingTextKeyVMs.Any(vm=>vm.CultureTextVMs[0].Text != translationString))
 				{
 					TaskDialogResult result = TaskDialog.Show(
 						owner: this,

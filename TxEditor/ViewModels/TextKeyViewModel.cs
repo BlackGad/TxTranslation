@@ -691,26 +691,24 @@ namespace Unclassified.TxEditor.ViewModels
 		/// <param name="newKey">New text key.</param>
 		/// <param name="textKeys">Text keys dictionary to update.</param>
 		/// <returns>Number of affected keys.</returns>
-		public int SetKeyRecursive(string newKey, Dictionary<string, TextKeyViewModel> textKeys)
+		public int SetKeyRecursive(string newKey, Dictionary<string, List<TextKeyViewModel>> textKeys)
 		{
-			int i = newKey.LastIndexOfAny(new char[] { ':', '.' });
+			int i = newKey.LastIndexOfAny(new[] { ':', '.' });
 			if (i >= 0)
 				DisplayName = newKey.Substring(i + 1);
 			else
 				DisplayName = newKey;
 			int affectedKeys = IsFullKey ? 1 : 0;
 
-			foreach (TextKeyViewModel child in Children)
+			foreach (var child in Children.Enumerate<TextKeyViewModel>())
 			{
 				affectedKeys += child.ReplaceKeyRecursive(TextKey, newKey, textKeys);
 			}
 
-			if (textKeys.ContainsKey(TextKey))
-			{
-				textKeys.Remove(TextKey);
-				textKeys.Add(newKey, this);
-			}
-			TextKey = newKey;
+		    if (textKeys.ContainsKey(TextKey)) textKeys[TextKey].Remove(this);
+		    textKeys.GetOrAdd(newKey, k => new List<TextKeyViewModel>()).Ensure(this);
+
+            TextKey = newKey;
 			OnPropertyChanged("TextKey");
 			return affectedKeys;
 		}
@@ -722,19 +720,17 @@ namespace Unclassified.TxEditor.ViewModels
 		/// <param name="newKey">New text key prefix to insert.</param>
 		/// <param name="textKeys">Text keys dictionary to update.</param>
 		/// <returns>Number of affected keys.</returns>
-		private int ReplaceKeyRecursive(string oldKey, string newKey, Dictionary<string, TextKeyViewModel> textKeys)
+		private int ReplaceKeyRecursive(string oldKey, string newKey, Dictionary<string, List<TextKeyViewModel>> textKeys)
 		{
 			string oldTextKey = TextKey;
 			TextKey = TextKey.ReplaceStart(oldKey, newKey);
 			OnPropertyChanged("TextKey");
-			if (textKeys.ContainsKey(oldTextKey))
-			{
-				textKeys.Remove(oldTextKey);
-				textKeys.Add(TextKey, this);
-			}
-			int affectedKeys = IsFullKey ? 1 : 0;
+		    if (textKeys.ContainsKey(oldTextKey)) textKeys[oldTextKey].Remove(this);
+		    textKeys.GetOrAdd(TextKey, k => new List<TextKeyViewModel>()).Ensure(this);
 
-			foreach (TextKeyViewModel child in Children)
+            var affectedKeys = IsFullKey ? 1 : 0;
+
+			foreach (var child in Children.Enumerate<TextKeyViewModel>())
 			{
 				affectedKeys += child.ReplaceKeyRecursive(oldKey, newKey, textKeys);
 			}

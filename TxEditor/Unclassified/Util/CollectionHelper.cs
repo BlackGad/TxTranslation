@@ -60,6 +60,20 @@ namespace Unclassified.Util
         }
 
         /// <summary>
+        ///     Ensures <paramref name="item" /> in <paramref name="list" />.
+        /// </summary>
+        /// <returns>
+        ///     Returns source item.
+        /// </returns>
+        public static T Ensure<T>(this IList<T> list, T item)
+        {
+            if (list == null) throw new ArgumentNullException(nameof(list));
+            if (item == null) throw new ArgumentNullException(nameof(item));
+            if (!list.Contains(item)) list.Add(item);
+            return item;
+        }
+
+        /// <summary>
         ///     Enumerates <paramref name="object" /> as generic enumeration and cast it to target type.
         /// </summary>
         /// <param name="object">Source object.</param>

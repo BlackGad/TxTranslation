@@ -99,7 +99,7 @@
 				</StackPanel>
 				<StackPanel Grid.Row="2" Grid.Column="1" Margin="0,1,0,0" Orientation="Horizontal">
 					<ui:IconButton
-						Command="{Binding NewFileCommand}"
+						Command="{Binding NewTranslationCommand}"
 						Content="{Tx:T 'toolbar.file.new', Default='New'}" IconSource="/Images/document_create.png"
 						ExtendedToolTipText="{Tx:T 'toolbar.file.new.tooltip'}"
 						ToolTipService.ShowOnDisabled="True"

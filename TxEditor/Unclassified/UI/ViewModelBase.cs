@@ -54,30 +54,18 @@ namespace Unclassified.UI
 
 		#region Common view properties
 
-		/// <summary>
-		/// Gets or sets the display name of this object. Derived classes can set this property to a
-		/// new value, or override it to determine the value on-demand.
-		/// </summary>
-		public virtual string DisplayName
-		{
-			get { return GetValue<string>("DisplayName"); }
-			set { SetValue(value, "DisplayName"); }
-		}
+		
+
+        public virtual string DisplayName
+        {
+            get { return GetValue<string>("DisplayName"); }
+            set { SetValue(value, "DisplayName"); }
+        }
+
+       
 
 		/// <summary>
-		/// Called when the <see cref="DisplayName"/> property on this object has a new value.
-		/// </summary>
-		[PropertyChangedHandler("DisplayName")]
-		protected virtual void OnDisplayNameChanged()
-		{
-			if (DisplayNameSetsModified)
-			{
-				IsModified = true;
-			}
-		}
-
-		/// <summary>
-		/// Gets or sets a value indicating whether changes to the <see cref="DisplayName"/>
+		/// Gets or sets a value indicating whether changes to the <see cref="PartialKey"/>
 		/// property set <see cref="IsModified"/> to true as if it had the
 		/// <see cref="SetsModifiedAttribute"/> set.
 		/// </summary>
@@ -587,7 +575,7 @@ namespace Unclassified.UI
 			// reveal misspelled properties and missing notifications. It's only checked in Debug
 			// builds for performance and stability reasons.
 #if DEBUG
-			if (!TypeDescriptor.GetProperties(this).OfType<PropertyDescriptor>().Any(d => d.Name == propertyName))
+			if (TypeDescriptor.GetProperties(this).OfType<PropertyDescriptor>().All(d => d.Name != propertyName))
 			{
 				throw new ArgumentException("Notifying a change of non-existing property " + GetType().Name + "." + propertyName);
 			}
@@ -608,14 +596,10 @@ namespace Unclassified.UI
 				changeHandler();
 			}
 
-			// Raise PropertyChanged event if there is a handler listening to it
-			var handler = PropertyChanged;
-			if (handler != null)
-			{
-				handler(this, new PropertyChangedEventArgs(propertyName));
-			}
+            // Raise PropertyChanged event if there is a handler listening to it
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
 
-			// Also notify changes for dependent properties
+		    // Also notify changes for dependent properties
 			// (This could be moved inside the (handler != null) check for improved performance, but
 			// then it could miss out On…Changed method calls for dependent properties which might
 			// be a nice feature.)
@@ -884,11 +868,11 @@ namespace Unclassified.UI
 	/// </summary>
 	internal sealed class EmptyViewModel : ViewModelBase
 	{
-		/// <summary>
-		/// Initialises a new instance of the EmptyViewModel class.
-		/// </summary>
-		/// <param name="displayName">The display name of the new instance.</param>
-		public EmptyViewModel(string displayName)
+        /// <summary>
+        /// Initialises a new instance of the EmptyViewModel class.
+        /// </summary>
+        /// <param name="displayName">The display name of the new instance.</param>
+        public EmptyViewModel(string displayName)
 		{
 			DisplayName = displayName;
 		}

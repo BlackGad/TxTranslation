@@ -390,7 +390,7 @@ namespace Unclassified.TxEditor.ViewModels
 
 		// Toolbar commands
 		// File section
-		public DelegateCommand NewFileCommand { get; private set; }
+		public DelegateCommand NewTranslationCommand { get; private set; }
 		public DelegateCommand LoadFolderCommand { get; private set; }
 		public DelegateCommand LoadFileCommand { get; private set; }
 		public DelegateCommand SaveCommand { get; private set; }
@@ -434,7 +434,7 @@ namespace Unclassified.TxEditor.ViewModels
 		{
 			// Toolbar
 			// File section
-			NewFileCommand = new DelegateCommand(OnNewFile);
+			NewTranslationCommand = new DelegateCommand(OnNewTranslation);
 			LoadFolderCommand = new DelegateCommand(OnLoadFolder);
 			LoadFileCommand = new DelegateCommand(OnLoadFile);
 		    SaveCommand = new DelegateCommand(OnSave, () => RootKeys.Any(k => k.HasUnsavedChanges));
@@ -507,7 +507,7 @@ namespace Unclassified.TxEditor.ViewModels
 			return true;
 		}
 
-		private void OnNewFile()
+		private void OnNewTranslation()
 		{
 			if (!CheckModifiedSaved()) return;
 
@@ -648,8 +648,8 @@ namespace Unclassified.TxEditor.ViewModels
 			//	if (!foundFiles)
 			//	{
 			//		foundFiles = true;
-   //                 RootTextKey.HasUnsavedChanges = false;   // Prevent another unsaved warning from OnNewFile
-			//		OnNewFile();   // Clear any currently loaded content
+   //                 RootTextKey.HasUnsavedChanges = false;   // Prevent another unsaved warning from OnNewTranslation
+			//		OnNewTranslation();   // Clear any currently loaded content
 			//	}
 			//	if (!LoadFrom(new FileLocation(fileName)))
 			//	{
@@ -1469,8 +1469,9 @@ namespace Unclassified.TxEditor.ViewModels
 		{
 			var selKey = MainWindow.Instance.TextKeysTreeView.LastSelectedItem as TextKeyViewModel;
 			if (selKey == null) return;   // No key selected, something is wrong
+            var selKeyAsRoot = selKey as RootKeyViewModel;
 
-		    var win = new TextKeyWindow
+            var win = new TextKeyWindow
 		    {
 		        Owner = MainWindow.Instance,
 		        Title = Tx.T("window.text key.rename.title"),
@@ -1478,7 +1479,7 @@ namespace Unclassified.TxEditor.ViewModels
 		        {
 		            Text = Tx.T("window.text key.rename.caption")
 		        },
-		        TextKey = selKey.TextKey,
+		        TextKey = selKeyAsRoot != null ? selKeyAsRoot.DisplayName : selKey.TextKey,
 		        OKButton =
 		        {
 		            Content = Tx.T("window.text key.rename.accept button")
@@ -1486,7 +1487,12 @@ namespace Unclassified.TxEditor.ViewModels
 		        RenameSelectMode = true
 		    };
 
-            win.RootItems.DisplayMemberPath = "DisplayName";
+		    if (selKeyAsRoot != null)
+		    {
+		        win.RootItems.Visibility = Visibility.Collapsed;
+		    }
+
+		    win.RootItems.DisplayMemberPath = "DisplayName";
 
             foreach (var rootKey in RootKeys)
             {
@@ -1497,7 +1503,7 @@ namespace Unclassified.TxEditor.ViewModels
 		    var selKeyRoot = selKey.FindRoot();
 		    win.RootItems.SelectedItem = selKeyRoot ?? win.RootItems.Items.Enumerate().FirstOrDefault();
 
-            if (selKey.Children.Count > 0)
+            if (selKey.Children.Count > 0 && selKeyAsRoot == null)
 			{
 				// There are other keys below the selected key
 				// Initially indicate that all subkeys will also be renamed
@@ -1517,6 +1523,15 @@ namespace Unclassified.TxEditor.ViewModels
 			{
 				// The dialog was confirmed
 				string newKey = win.TextKey;
+
+
+			    if (selKeyAsRoot != null)
+			    {
+			        selKeyAsRoot.DisplayName = newKey;
+			        selKeyAsRoot.HasUnsavedChanges = true;
+                    return;
+			    }
+
                 var newRoot = win.RootItems.SelectedItem as RootKeyViewModel;
 
                 // Was the name changed at all?
@@ -1838,7 +1853,7 @@ namespace Unclassified.TxEditor.ViewModels
 
 		private int DuplicateTextKeyRecursive(TextKeyViewModel srcTextKey, TextKeyViewModel destParent)
 		{
-			var destKeyName = destParent.TextKey + (destParent.IsNamespace ? ":" : ".") + srcTextKey.DisplayName;
+			var destKeyName = destParent.TextKey + (destParent.IsNamespace ? ":" : ".") + srcTextKey.PartialKey;
 			var destKey = FindOrCreateTextKey(destParent.FindRoot(), destKeyName);
 			destKey.MergeFrom(srcTextKey);
 
@@ -1986,7 +2001,7 @@ namespace Unclassified.TxEditor.ViewModels
 			selKey.IsNamespace = true;
 			foreach (var child in selKey.Children.OfType<TextKeyViewModel>())
 			{
-				child.SetKeyRecursive(selKey.TextKey + ":" + child.DisplayName, TextKeys);
+				child.SetKeyRecursive(selKey.TextKey + ":" + child.PartialKey, TextKeys);
 			}
 			selKey.Parent.Children.Remove(selKey);
 			selKey.Parent.Children.InsertSorted(selKey, TextKeyViewModel.Compare);
@@ -2007,7 +2022,7 @@ namespace Unclassified.TxEditor.ViewModels
 		{
 			var selKey = selectedTextKeys[0];
 
-			if (selKey.DisplayName.IndexOf('.') != -1)
+			if (selKey.PartialKey.IndexOf('.') != -1)
 			{
 				App.WarningMessage(Tx.T("msg.convert to text key.contains point", "key", Tx.Q(selKey.TextKey)));
 				return;
@@ -2016,7 +2031,7 @@ namespace Unclassified.TxEditor.ViewModels
 			selKey.IsNamespace = false;
 			foreach (var child in selKey.Children.OfType<TextKeyViewModel>())
 			{
-				child.SetKeyRecursive(selKey.TextKey + "." + child.DisplayName, TextKeys);
+				child.SetKeyRecursive(selKey.TextKey + "." + child.PartialKey, TextKeys);
 			}
 			selKey.Parent.Children.Remove(selKey);
 			selKey.Parent.Children.InsertSorted(selKey, TextKeyViewModel.Compare);
@@ -2061,7 +2076,7 @@ namespace Unclassified.TxEditor.ViewModels
 
 		public void LoadFiles(IEnumerable<string> fileNames)
 		{
-			OnNewFile();
+			OnNewTranslation();
 
    //         int count = 0;
 			//string prevPrimaryCulture = null;
@@ -2281,10 +2296,7 @@ namespace Unclassified.TxEditor.ViewModels
 	        {
 	            if (!create) return null;
 
-                root = new RootKeyViewModel(this)
-	            {
-	                DisplayName = "Translation"
-	            };
+                root = new RootKeyViewModel(this);
 	            RootKeys.Add(root);
 	        }
             
@@ -2303,7 +2315,7 @@ namespace Unclassified.TxEditor.ViewModels
 				// Namespace set
 				partialKey = nsParts[0];
 				var subtk = tk.Children.OfType<TextKeyViewModel>()
-					.SingleOrDefault(vm => vm.DisplayName == nsParts[0]);
+					.SingleOrDefault(vm => vm.PartialKey == nsParts[0]);
 				if (subtk != null && !subtk.IsNamespace)
 				{
 					throw new NonNamespaceExistsException();
@@ -2313,7 +2325,7 @@ namespace Unclassified.TxEditor.ViewModels
 					// Namespace tree item does not exist yet, create it
 					if (!create) return null;
 					subtk = new TextKeyViewModel(nsParts[0], false, tk, tk.MainWindowVM);
-					subtk.DisplayName = nsParts[0];
+					subtk.PartialKey = nsParts[0];
 					subtk.IsNamespace = true;
 					tk.Children.InsertSorted(subtk, TextKeyViewModel.Compare);
 				}
@@ -2338,7 +2350,7 @@ namespace Unclassified.TxEditor.ViewModels
 
 					// Search for tree item
 					var subtk = tk.Children.OfType<TextKeyViewModel>()
-						.SingleOrDefault(vm => vm.DisplayName == keySegment);
+						.SingleOrDefault(vm => vm.PartialKey == keySegment);
 					if (subtk != null && subtk.IsNamespace)
 					{
 						throw new NamespaceExistsException();
@@ -2348,7 +2360,7 @@ namespace Unclassified.TxEditor.ViewModels
 						// This level of text key item does not exist yet, create it
 						if (!create) return null;
 						subtk = new TextKeyViewModel(partialKey, i == keySegments.Length - 1, tk, tk.MainWindowVM);
-						subtk.DisplayName = keySegment;
+						subtk.PartialKey = keySegment;
 						tk.Children.InsertSorted(subtk, TextKeyViewModel.Compare);
 					}
 					tk = subtk;

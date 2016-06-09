@@ -29,11 +29,14 @@ namespace Unclassified.TxEditor.ViewModels
 			UpdateIcon();
 		}
 
-		#endregion Constructor
+        #endregion Constructor
 
-		#region Public properties
 
-		public MainViewModel MainWindowVM { get; private set; }
+      
+
+        #region Public properties
+
+        public MainViewModel MainWindowVM { get; private set; }
 
 		public string TextKey { get; private set; }
 
@@ -65,11 +68,32 @@ namespace Unclassified.TxEditor.ViewModels
 			}
 		}
 
-		/// <summary>
-		/// Gets or sets a value indicating whether the text key item itself has a problem. This
-		/// is explained in the Remarks property and such keys are counted in the problems counter.
-		/// </summary>
-		public bool HasProblem
+        /// <summary>
+        /// Gets or sets the partial key of this object. Derived classes can set this property to a
+        /// new value, or override it to determine the value on-demand.
+        /// </summary>
+        public virtual string PartialKey
+        {
+            get { return GetValue<string>("PartialKey"); }
+            set { SetValue(value, "PartialKey"); }
+        }
+
+
+        /// <summary>
+        /// Called when the <see cref="PartialKey"/> property on this object has a new value.
+        /// </summary>
+        [PropertyChangedHandler("PartialKey")]
+        protected virtual void OnPartialKeyChanged()
+        {
+            if (DisplayNameSetsModified) IsModified = true;
+            DisplayName = PartialKey;
+        }
+
+        /// <summary>
+        /// Gets or sets a value indicating whether the text key item itself has a problem. This
+        /// is explained in the Remarks property and such keys are counted in the problems counter.
+        /// </summary>
+        public bool HasProblem
 		{
 			get
 			{
@@ -672,9 +696,9 @@ namespace Unclassified.TxEditor.ViewModels
 		{
 			int i = newKey.LastIndexOfAny(new char[] { ':', '.' });
 			if (i >= 0)
-				DisplayName = newKey.Substring(i + 1);
+				PartialKey = newKey.Substring(i + 1);
 			else
-				DisplayName = newKey;
+				PartialKey = newKey;
 
 			if (textKeys != null && textKeys.ContainsKey(TextKey))
 			{
@@ -695,9 +719,9 @@ namespace Unclassified.TxEditor.ViewModels
 		{
 			int i = newKey.LastIndexOfAny(new[] { ':', '.' });
 			if (i >= 0)
-				DisplayName = newKey.Substring(i + 1);
+				PartialKey = newKey.Substring(i + 1);
 			else
-				DisplayName = newKey;
+				PartialKey = newKey;
 			int affectedKeys = IsFullKey ? 1 : 0;
 
 			foreach (var child in Children.Enumerate<TextKeyViewModel>())
@@ -804,9 +828,9 @@ namespace Unclassified.TxEditor.ViewModels
 		/// <param name="sourceKey"></param>
 		public void MergeChildrenRecursive(TextKeyViewModel sourceKey)
 		{
-			foreach (TextKeyViewModel sourceChild in sourceKey.Children)
+			foreach (var sourceChild in sourceKey.Children.Enumerate<TextKeyViewModel>())
 			{
-				var myChild = Children.FirstOrDefault(c => c.DisplayName == sourceChild.DisplayName) as TextKeyViewModel;
+				var myChild = Children.Enumerate<TextKeyViewModel>().FirstOrDefault(c => c.PartialKey == sourceChild.PartialKey) as TextKeyViewModel;
 				if (myChild != null)
 				{
 					myChild.MergeFrom(sourceChild);
@@ -815,7 +839,7 @@ namespace Unclassified.TxEditor.ViewModels
 				{
 					myChild = sourceChild.Clone();
 					myChild.Parent = this;
-					myChild.SetKey(this.TextKey + "." + sourceChild.DisplayName, null);
+					myChild.SetKey(this.TextKey + "." + sourceChild.PartialKey, null);
 					Children.Add(myChild);
 				}
 				myChild.MergeChildrenRecursive(sourceChild);

@@ -13,7 +13,7 @@ namespace Unclassified.TxEditor.ViewModels
         public RootKeyViewModel(MainViewModel mainWindowVm)
             : base(null, false, null, mainWindowVm)
         {
-            
+            DisplayName = "Translation";
         }
 
         #endregion

@@ -38,7 +38,7 @@ namespace Unclassified.TxEditor.ViewModels
 		/// </summary>
 		private TreeViewItemViewModel()
 		{
-			DisplayName = "Dummy";
+            DisplayName = "Dummy";
 			IsVisible = true;
 			IsEnabled = true;
 		}

@@ -277,7 +277,7 @@ namespace Unclassified.TxEditor.Views
 				TextKeysTreeView.ContextMenu.ReduceSeparators();
 
 				// If no menu item is visible, don't show the menu
-				if (!TextKeysTreeView.ContextMenu.Items.OfType<MenuItem>().Any(mi => mi.Visibility == Visibility.Visible))
+				if (TextKeysTreeView.ContextMenu.Items.OfType<MenuItem>().All(mi => mi.Visibility != Visibility.Visible))
 				{
 					TextKeysTreeView.ContextMenu.IsOpen = false;
 				}

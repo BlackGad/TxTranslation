@@ -177,6 +177,7 @@ namespace Unclassified.TxEditor.Models.Versions
                     var cultureTranslation = new SerializedTranslation
                     {
                         IsTemplate = translation.IsTemplate,
+                        Name = translation.Name,
                         Cultures = new []{culture}.ToList()
                     };
                     fileLocation.Save(SerializeTranslation(cultureTranslation));

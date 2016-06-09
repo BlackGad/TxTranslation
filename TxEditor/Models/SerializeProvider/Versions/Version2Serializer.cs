@@ -81,6 +81,7 @@ namespace Unclassified.TxEditor.Models.Versions
             Func<SerializedTranslation> deserializeFunc = () => new SerializedTranslation
             {
                 IsTemplate = document.DocumentElement?.Attributes["template"]?.Value == "true",
+                Name = document.DocumentElement?.Attributes["name"]?.Value,
                 Cultures = document.DocumentElement?
                                    .SelectNodes("culture")
                                    .Enumerate<XmlElement>()
@@ -244,6 +245,13 @@ namespace Unclassified.TxEditor.Models.Versions
             var spaceAttr = document.CreateAttribute("xml:space");
             spaceAttr.Value = "preserve";
             translationElement.Attributes.Append(spaceAttr);
+
+            if (!string.IsNullOrEmpty(translation.Name))
+            {
+                var nameAttr = document.CreateAttribute("name");
+                nameAttr.Value = translation.Name;
+                translationElement.Attributes.Append(nameAttr);
+            }
 
             if (translation.IsTemplate)
             {

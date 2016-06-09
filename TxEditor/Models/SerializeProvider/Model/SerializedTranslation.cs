@@ -15,6 +15,7 @@ namespace Unclassified.TxEditor.Models
 
         #region Properties
 
+        public string Name { get; set; }
         public List<SerializedCulture> Cultures { get; set; }
         public bool IsTemplate { get; set; }
 

@@ -98,6 +98,7 @@ namespace Unclassified.TxEditor.ViewModels
             return new SerializedTranslation
             {
                 IsTemplate = rootModel?.IsTemplate == true,
+                Name = rootModel.DisplayName,
                 Cultures = cultures.Values.ToList()
             };
         }
@@ -699,7 +700,8 @@ namespace Unclassified.TxEditor.ViewModels
                                  Tx.T("file filter.xml files") + " (*.xml)|*.xml|" +
                                  Tx.T("file filter.all files") + " (*.*)|*.*",
                         OverwritePrompt = true,
-                        Title = Tx.T("msg.save.title")
+                        Title = Tx.T("msg.save.title"),
+                        FileName = rootKey.DisplayName
                     };
                     if (dlg.ShowDialog(MainWindow.Instance) == true)
                     {

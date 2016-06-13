@@ -649,6 +649,8 @@ The primary culture is now set to {name}.</text>
 		<text key="msg.load folder.multiple dictionaries in folder.desc">Please choose the dictionary to load:</text>
 		<text key="msg.load folder.no files found">No files were found in the selected folder.</text>
 		<text key="msg.load folder.title">Load files from folder</text>
+    <text key="msg.load location.related locations available">There are additional location available for this location.</text>
+		<text key="msg.load location.related locations available.desc">The following locations can be loaded as well: {list}</text>
 		<text key="msg.nothing available">Nothing available</text>
 		<text key="msg.nothing available.desc">Currently no text keys are available. Either add a new text key to the dictionary or adjust your search or filter to see existing text keys.</text>
 		<text key="msg.nothing selected">Nothing selected</text>

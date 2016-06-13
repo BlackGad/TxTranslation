@@ -9,9 +9,9 @@ using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Windows;
+using System.Windows.Forms;
 using System.Windows.Media;
 using System.Xml;
-using Microsoft.Win32;
 using TaskDialogInterop;
 using Unclassified.FieldLog;
 using Unclassified.TxEditor.Models;
@@ -20,6 +20,10 @@ using Unclassified.TxEditor.Views;
 using Unclassified.TxLib;
 using Unclassified.UI;
 using Unclassified.Util;
+using Clipboard = System.Windows.Clipboard;
+using IDataObject = System.Windows.IDataObject;
+using OpenFileDialog = Microsoft.Win32.OpenFileDialog;
+using SaveFileDialog = Microsoft.Win32.SaveFileDialog;
 
 namespace Unclassified.TxEditor.ViewModels
 {
@@ -615,67 +619,46 @@ namespace Unclassified.TxEditor.ViewModels
 			fileDlg.Title = Tx.T("msg.load file.title");
 			if (fileDlg.ShowDialog(MainWindow.Instance) == true)
 			{
-				DoLoadFiles(fileDlg.FileNames);
+                LoadLocations(fileDlg.FileNames.Select(f=>new FileLocation(f)).Cast<ISerializeLocation>().ToArray());
 			}
 		}
 
-		public void DoLoadFiles(string[] fileNames)
-		{
-   //         // Check for same prefix and reject mixed files
-   //         var prefixes = new List<string>();
-			//foreach (string fileName in fileNames)
-			//{
-			//	string prefix = FileNameHelper.GetPrefix(fileName);
-			//	if (!prefixes.Contains(prefix))
-			//	{
-			//		prefixes.Add(prefix);
-			//	}
-			//}
-			//if (prefixes.Count > 1)
-			//{
-			//	App.WarningMessage(Tx.T("msg.load file.cannot load different prefixes"));
-			//	return;
-			//}
+	    public void LoadLocations(params ISerializeLocation[] locations)
+	    {
+	        var translations = SerializeProvider.Instance.DetectUniqueTranslations(locations).ToArray();
+	        int filesLoaded = 0;
+	        foreach (var detectedTranslation in translations)
+	        {
+	            var loadMissedRelatedLocationsResult = DialogHelper.LoadMissedRelatedLocations(detectedTranslation);
+	            if (loadMissedRelatedLocationsResult == DialogResult.Cancel) continue;
 
-			//var filesToLoad = new List<string>(fileNames);
+	            var instructions = detectedTranslation.DeserializeInstructions;
+	            if (loadMissedRelatedLocationsResult == DialogResult.OK)
+	                instructions = instructions.Union(detectedTranslation.RelatedMissedInstructions).ToArray();
 
-			//if (!FileNameHelper.FindOtherCultures(filesToLoad)) return;
+	            var root = RootKeys.FirstOrDefault(r => Equals(r.Location, detectedTranslation.Description.Location));
+	            root = root ?? new RootKeyViewModel(this)
+	            {
+	                Location = detectedTranslation.Description.Location,
+	                Serializer = detectedTranslation.Description.Serializer,
+	                DisplayName = detectedTranslation.Description.Name
+	            };
 
-			//var foundFiles = false;
-			//string prevPrimaryCulture = null;
-			//var primaryCultureFiles = new List<string>();
-			//foreach (string fileName in filesToLoad)
-			//{
-			//	if (!foundFiles)
-			//	{
-			//		foundFiles = true;
-   //                 RootTextKey.HasUnsavedChanges = false;   // Prevent another unsaved warning from OnNewTranslation
-			//		OnNewTranslation();   // Clear any currently loaded content
-			//	}
-			//	if (!LoadFrom(new FileLocation(fileName)))
-			//	{
-			//		break;
-			//	}
-			//	if (PrimaryCulture != prevPrimaryCulture)
-			//	{
-			//		primaryCultureFiles.Add(PrimaryCulture);
-			//	}
-			//	prevPrimaryCulture = PrimaryCulture;
-			//}
-			//if (primaryCultureFiles.Count > 1)
-			//{
-			//	// Display a warning if multiple (and which) files claimed to be the primary culture, and which has won
-			//	App.WarningMessage(Tx.T("msg.load file.multiple primary cultures", "list", string.Join(", ", primaryCultureFiles), "name", PrimaryCulture));
-			//}
+	            var importResults = instructions.Select(i => Import(root, i)).ToArray();
+	            if (!importResults.Any(r => r == DialogResult.Cancel))
+	            {
+                    filesLoaded += importResults.Count(r => r == DialogResult.OK);
+                    if(!RootKeys.Contains(root)) RootKeys.Add(root);
+                    SortCulturesInTextKey(root);
+                }
+	        }
             
-			//SortCulturesInTextKey(RootTextKey);
-			//DeletedCultureNames.Clear();
-			//ValidateTextKeysDelayed();
-			//StatusText = Tx.T("statusbar.n files loaded", filesToLoad.Count) + Tx.T("statusbar.n text keys defined", TextKeys.Count);
-   //         RootTextKey.HasUnsavedChanges = false;
-   //         UpdateTitle();
-			//ClearViewHistory();
-		}
+            DeletedCultureNames.Clear();
+            ValidateTextKeysDelayed();
+            StatusText = Tx.T("statusbar.n files loaded", filesLoaded) + Tx.T("statusbar.n text keys defined", TextKeys.Count);
+            UpdateTitle();
+            ClearViewHistory();
+        }
 
 		private void OnSave()
 		{
@@ -855,7 +838,11 @@ namespace Unclassified.TxEditor.ViewModels
             {
                 try
                 {
-                    return ImportLocation(selectedRoot, new FileLocation(fileName));
+                    var location = new FileLocation(fileName);
+                    var serializeProvider = SerializeProvider.Instance;
+                    var serializer = serializeProvider.DetectSerializer(location);
+                    var instruction = serializeProvider.LoadFrom(location, serializer);
+                    return Import(selectedRoot, instruction) == DialogResult.OK;
                 }
                 catch (Exception)
                 {
@@ -914,11 +901,10 @@ namespace Unclassified.TxEditor.ViewModels
 		    if (win.ShowDialog() != true) return;
 
 		    var ci = new CultureInfo(win.CodeText.Text);
-            //if(!RootKeys.Any()) RootKeys.
 
+		    AddNewCulture(ci.IetfLanguageTag, true, RootKeys.Cast<TextKeyViewModel>().ToArray());
             foreach (var root in RootKeys)
 		    {
-                AddNewCulture(root, ci.IetfLanguageTag, true);
                 if (win.InsertSystemKeysCheckBox.IsChecked == true) InsertSystemKeys(root, ci.Name);
                 root.HasUnsavedChanges = true;
             }
@@ -2145,20 +2131,18 @@ namespace Unclassified.TxEditor.ViewModels
    //         RootTextKey.HasUnsavedChanges = false;
         }
 
-        private bool ImportLocation(RootKeyViewModel root, ISerializeLocation location)
+        private DialogResult Import(RootKeyViewModel root, DeserializeInstruction instruction)
         {
             if (root == null) throw new ArgumentNullException(nameof(root));
+            if (instruction == null) throw new ArgumentNullException(nameof(instruction));
             SerializedTranslation translation;
             try
             {
-                var serializeProvider = SerializeProvider.Instance;
-
-                var serializer = serializeProvider.DetectSerializer(location);
-                translation = serializeProvider.LoadFrom(location, serializer).Deserialize();
+                translation = instruction.Deserialize();
             }
             catch (Exception ex)
             {
-                FL.Error("Error loading", location.ToString());
+                FL.Error("Error loading", instruction.Location.ToString());
                 FL.Error(ex, "Loading XML dictionary");
                 var result = TaskDialog.Show(
                     owner: MainWindow.Instance,
@@ -2166,12 +2150,12 @@ namespace Unclassified.TxEditor.ViewModels
                     title: "TxEditor",
                     mainIcon: VistaTaskDialogIcon.Error,
                     mainInstruction: Tx.T("msg.load file.invalid location"),
-                    content: Tx.T("msg.load file.invalid location.desc", "name", location.ToString(), "msg", ex.Message),
+                    content: Tx.T("msg.load file.invalid location.desc", "name", instruction.Location.ToString(), "msg", ex.Message),
                     customButtons: new[] { Tx.T("task dialog.button.skip file"), Tx.T("task dialog.button.cancel") });
 
-                return result.CustomButtonResult == 0;
+                if (result.CustomButtonResult == 0) return DialogResult.Ignore;
+                return DialogResult.Cancel;
             }
-
 
             foreach (var culture in translation.Cultures)
             {
@@ -2182,25 +2166,22 @@ namespace Unclassified.TxEditor.ViewModels
                         allowDialogCancellation: true,
                         title: "TxEditor",
                         mainInstruction: Tx.T("msg.import location.add new culture", "culture", culture.Name),
-                        content: Tx.T("msg.import location.add new culture.desc", "name", location.ToString(), "culture", culture.Name),
-                        customButtons:
-                            new[] { Tx.T("task dialog.button.add culture"), Tx.T("task dialog.button.skip culture"), Tx.T("task dialog.button.cancel") });
+                        content: Tx.T("msg.import location.add new culture.desc", "name", instruction.Location.ToString(), "culture", culture.Name),
+                        customButtons: new[] 
+                        {
+                            Tx.T("task dialog.button.add culture"),
+                            Tx.T("task dialog.button.skip culture"),
+                            Tx.T("task dialog.button.cancel")
+                        });
 
-                    switch (result.CustomButtonResult)
-                    {
-                        case 0:
-                            break;
-                        case 1:
-                            return true;
-                        default:
-                            return false;
-                    }
+                    if (result.CustomButtonResult == 1) continue;
+                    if (result.CustomButtonResult == 2) return DialogResult.Cancel;
                 }
 
                 ComposeKeys(root, culture.Name, culture.Keys);
             }
 
-            return true;
+            return DialogResult.OK;
         }
 
         private bool LoadFrom(ISerializeLocation location)
@@ -2265,7 +2246,10 @@ namespace Unclassified.TxEditor.ViewModels
 		{
             if (root == null) throw new ArgumentNullException(nameof(root));
             // Add the new culture everywhere
-	        if (!LoadedCultureNames.Contains(cultureName)) AddNewCulture(root, cultureName, false);
+            if (!LoadedCultureNames.Contains(cultureName))
+            {
+                AddNewCulture(cultureName, false, RootKeys.Union(new TextKeyViewModel[] { root }).Distinct().ToArray());
+            }
 
 	        var validKeys = keys.Enumerate().Where(k =>
 		    {
@@ -2504,29 +2488,25 @@ namespace Unclassified.TxEditor.ViewModels
 			}
 		}
 
-		private void AddNewCulture(TextKeyViewModel root, string cultureName, bool validate)
-		{
-			foreach (var tk in root.Children.Enumerate<TextKeyViewModel>())
-			{
-				EnsureCultureInTextKey(tk, cultureName);
-				tk.UpdateCultureTextSeparators();
-				if (tk.Children.Count > 0)
-				{
-					AddNewCulture(tk, cultureName, validate);
-				}
-			}
-			if (!LoadedCultureNames.Contains(cultureName))
-			{
-				LoadedCultureNames.Add(cultureName);
-			}
-			DeletedCultureNames.Remove(cultureName);   // in case it's been deleted before
-			if (validate)
-			{
-				ValidateTextKeysDelayed();
-			}
-		}
+	    private void AddNewCulture(string cultureName, bool validate, params TextKeyViewModel[] roots)
+	    {
+	        foreach (var root in roots)
+	        {
+	            foreach (var tk in root.Children.Enumerate<TextKeyViewModel>())
+	            {
+	                EnsureCultureInTextKey(tk, cultureName);
+	                tk.UpdateCultureTextSeparators();
+	            }
+                AddNewCulture(cultureName, validate, root.Children.Enumerate<TextKeyViewModel>().ToArray());
 
-		private void DeleteCulture(TextKeyViewModel root, string cultureName, bool validate)
+	            if (!LoadedCultureNames.Contains(cultureName)) LoadedCultureNames.Add(cultureName);
+
+	            DeletedCultureNames.Remove(cultureName); // in case it's been deleted before
+	            if (validate) ValidateTextKeysDelayed();
+	        }
+	    }
+
+	    private void DeleteCulture(TextKeyViewModel root, string cultureName, bool validate)
 		{
 			foreach (var tk in root.Children.Enumerate<TextKeyViewModel>())
 			{

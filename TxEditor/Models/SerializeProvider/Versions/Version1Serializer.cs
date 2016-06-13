@@ -20,7 +20,8 @@ namespace Unclassified.TxEditor.Models.Versions
             if (culture == null) throw new ArgumentNullException(nameof(culture));
 
             var parts = ParseString(source);
-            return parts.Item1 + "." + culture + parts.Item3;
+            var extension = string.IsNullOrEmpty(parts.Item3) ? ".xml" : parts.Item3;
+            return parts.Item1 + "." + culture + extension;
         }
 
         private static CultureInfo ParseLocationForCulture(ISerializeLocation location)
@@ -96,12 +97,14 @@ namespace Unclassified.TxEditor.Models.Versions
         {
             string name = null;
             string shortName = null;
+            ISerializeLocation finalLocation = null;
             var fileSource = location as FileLocation;
             if (fileSource != null)
             {
                 var parsedString = ParseString(fileSource.Filename);
                 name = parsedString.Item1;
                 shortName = Path.GetFileName(parsedString.Item1);
+                finalLocation = new FileLocation(parsedString.Item1);
             }
 
             var embeddedSource = location as EmbeddedResourceLocation;
@@ -109,9 +112,10 @@ namespace Unclassified.TxEditor.Models.Versions
             {
                 name = embeddedSource.ToString();
                 shortName = ParseString(embeddedSource.Name).Item1;
+                finalLocation = new EmbeddedResourceLocation(embeddedSource.Assembly, shortName);
             }
 
-            return new SerializeDescription(name, shortName);
+            return new SerializeDescription(name, shortName, finalLocation, this);
         }
 
         public DeserializeInstruction Deserialize(ISerializeLocation location)

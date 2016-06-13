@@ -5,6 +5,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using Unclassified.TxEditor.Models;
 using Unclassified.TxEditor.ViewModels;
 using Unclassified.UI;
 using Unclassified.Util;
@@ -115,7 +116,7 @@ namespace Unclassified.TxEditor.Views
 					}
 					else
 					{
-						vm.DoLoadFiles(fileNames);
+					    vm.LoadLocations(fileNames.Select(f => new FileLocation(f)).Cast<ISerializeLocation>().ToArray());
 					}
 					Activate();
 				}

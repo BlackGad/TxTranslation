@@ -78,15 +78,15 @@ namespace Unclassified.TxEditor.Models
                 var serializer = (IVersionSerializer)DetectSerializer(location);
                 if (serializer == null) continue;
 
-                var relatedFromAvailable = serializer.DetectRelatedLocations(location)
-                                                     .Where(l => available.Contains(l))
-                                                     .ToList();
+                var detectedRelatedLocations = serializer.DetectRelatedLocations(location).ToList();
+                var relatedFromAvailable = detectedRelatedLocations.Where(l => available.Contains(l)).ToList();
 
                 relatedFromAvailable.ForEach(l => processed.Add(l));
 
+                var relatedMissedInstructions = detectedRelatedLocations.Except(relatedFromAvailable).Select(l => serializer.Deserialize(l)).ToArray();
                 var instructions = relatedFromAvailable.Select(l => serializer.Deserialize(l)).ToArray();
 
-                yield return new DetectedTranslation(serializer.DescribeLocation(location), instructions);
+                yield return new DetectedTranslation(serializer.DescribeLocation(location), instructions, relatedMissedInstructions);
             }
         }
 

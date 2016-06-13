@@ -51,7 +51,7 @@ namespace Unclassified.TxEditor.Models.Versions
                 shortName = embeddedSource.Name;
             }
 
-            return new SerializeDescription(name, shortName);
+            return new SerializeDescription(name, shortName, location, this);
         }
 
         public bool IsValid(ISerializeLocation location)

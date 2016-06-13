@@ -803,38 +803,74 @@ namespace Unclassified.TxEditor.ViewModels
 
 		private void OnImportFile()
 		{
-		    //var dlg = new OpenFileDialog
-		    //{
-		    //    CheckFileExists = true,
-		    //    Filter = Tx.T("file filter.tx dictionary files") + " (*.txd)|*.txd|" +
-		    //             Tx.T("file filter.xml files") + " (*.xml)|*.xml|" +
-		    //             Tx.T("file filter.all files") + " (*.*)|*.*",
-		    //    Multiselect = true,
-		    //    ShowReadOnly = false,
-		    //    Title = Tx.T("msg.import file.title")
-		    //};
-		    //if (dlg.ShowDialog(MainWindow.Instance) != true) return;
+            var dlg = new OpenFileDialog
+            {
+                CheckFileExists = true,
+                Filter = Tx.T("file filter.tx dictionary files") + " (*.txd)|*.txd|" +
+                         Tx.T("file filter.xml files") + " (*.xml)|*.xml|" +
+                         Tx.T("file filter.all files") + " (*.*)|*.*",
+                Multiselect = true,
+                ShowReadOnly = false,
+                Title = Tx.T("msg.import file.title")
+            };
+            if (dlg.ShowDialog(MainWindow.Instance) != true) return;
 
-		    //var successfullyImportedFiles = dlg.FileNames.Where(fileName =>
-		    //{
-		    //    try
-		    //    {
-		    //        return ImportFromXmlFile(fileName);
-		    //    }
-		    //    catch (Exception)
-		    //    {
-      //              //Log import error
-      //              return false;
-		    //    }
-		    //}).ToArray();
+		    var translationDlg = new TranslationSelectWindow
+		    {
+		        Title = Tx.T("window.select translation.import.title"),
+		        CaptionLabel =
+		        {
+		            Text = Tx.T("window.select translation.import.caption")
+		        },
+		        OKButton =
+		        {
+		            Content = Tx.T("window.select translation.import.accept button")
+		        }
+		    };
 
-		    //if (!successfullyImportedFiles.Any()) return;
+            translationDlg.RootItems.DisplayMemberPath = "DisplayName";
 
-		    //SortCulturesInTextKey(RootTextKey);
-		    //ValidateTextKeysDelayed();
-		    //StatusText = Tx.T("statusbar.n files imported", successfullyImportedFiles.Length) + Tx.T("statusbar.n text keys defined", TextKeys.Count);
-      //      RootTextKey.HasUnsavedChanges = true;
-		}
+            foreach (var rootKey in RootKeys)
+            {
+                translationDlg.RootItems.Items.Add(rootKey);
+            }
+            translationDlg.RootItems.Items.Add(new CreateNewTranslationObject());
+
+
+            var selectedKey = MainWindow.Instance.TextKeysTreeView.LastSelectedItem as TextKeyViewModel;
+		    if (selectedKey != null) translationDlg.RootItems.SelectedItem = selectedKey.FindRoot();
+
+            translationDlg.RootItems.SelectedItem = translationDlg.RootItems.SelectedItem ?? translationDlg.RootItems.Items.Enumerate().FirstOrDefault();
+            if (translationDlg.ShowDialog() != true) return;
+
+		    var selectedRoot = translationDlg.RootItems.SelectedItem as RootKeyViewModel;
+
+            if (selectedRoot == null)
+            {
+                selectedRoot = new RootKeyViewModel(this);
+                RootKeys.Add(selectedRoot);
+            }
+
+            var successfullyImportedFiles = dlg.FileNames.Where(fileName =>
+            {
+                try
+                {
+                    return ImportLocation(selectedRoot, new FileLocation(fileName));
+                }
+                catch (Exception)
+                {
+                    //Log import error
+                    return false;
+                }
+            }).ToArray();
+
+            if (!successfullyImportedFiles.Any()) return;
+
+            SortCulturesInTextKey(selectedRoot);
+            ValidateTextKeysDelayed();
+            StatusText = Tx.T("statusbar.n locations imported", successfullyImportedFiles.Length) + Tx.T("statusbar.n text keys defined", TextKeys.Count);
+            selectedRoot.HasUnsavedChanges = true;
+        }
 
 		private bool CanExportKeys()
 		{
@@ -2109,60 +2145,60 @@ namespace Unclassified.TxEditor.ViewModels
    //         RootTextKey.HasUnsavedChanges = false;
         }
 
-        private bool ImportFromXmlFile(string fileName)
+        private bool ImportLocation(RootKeyViewModel root, ISerializeLocation location)
         {
-            //SerializedTranslation translation;
-            //try
-            //{
-            //    var location = new FileLocation(fileName);
-            //    var serializeProvider = SerializeProvider.Instance;
+            if (root == null) throw new ArgumentNullException(nameof(root));
+            SerializedTranslation translation;
+            try
+            {
+                var serializeProvider = SerializeProvider.Instance;
 
-            //    var serializer = serializeProvider.DetectSerializer(location);
-            //    translation = serializeProvider.LoadFrom(location, serializer).Deserialize();
-            //}
-            //catch (Exception ex)
-            //{
-            //    FL.Error("Error loading file", fileName);
-            //    FL.Error(ex, "Loading XML dictionary file");
-            //    var result = TaskDialog.Show(
-            //        owner: MainWindow.Instance,
-            //        allowDialogCancellation: true,
-            //        title: "TxEditor",
-            //        mainIcon: VistaTaskDialogIcon.Error,
-            //        mainInstruction: Tx.T("msg.load file.invalid file"),
-            //        content: Tx.T("msg.load file.invalid file.desc", "name", fileName, "msg", ex.Message),
-            //        customButtons: new[] { Tx.T("task dialog.button.skip file"), Tx.T("task dialog.button.cancel") });
+                var serializer = serializeProvider.DetectSerializer(location);
+                translation = serializeProvider.LoadFrom(location, serializer).Deserialize();
+            }
+            catch (Exception ex)
+            {
+                FL.Error("Error loading", location.ToString());
+                FL.Error(ex, "Loading XML dictionary");
+                var result = TaskDialog.Show(
+                    owner: MainWindow.Instance,
+                    allowDialogCancellation: true,
+                    title: "TxEditor",
+                    mainIcon: VistaTaskDialogIcon.Error,
+                    mainInstruction: Tx.T("msg.load file.invalid location"),
+                    content: Tx.T("msg.load file.invalid location.desc", "name", location.ToString(), "msg", ex.Message),
+                    customButtons: new[] { Tx.T("task dialog.button.skip file"), Tx.T("task dialog.button.cancel") });
 
-            //    return result.CustomButtonResult == 0;
-            //}
+                return result.CustomButtonResult == 0;
+            }
 
 
-            //foreach (var culture in translation.Cultures)
-            //{
-            //    if (!LoadedCultureNames.Contains(culture.Name))
-            //    {
-            //        var result = TaskDialog.Show(
-            //            owner: MainWindow.Instance,
-            //            allowDialogCancellation: true,
-            //            title: "TxEditor",
-            //            mainInstruction: Tx.T("msg.import file.add new culture", "culture", culture.Name),
-            //            content: Tx.T("msg.import file.add new culture.desc", "name", fileName, "culture", culture.Name),
-            //            customButtons:
-            //                new[] { Tx.T("task dialog.button.add culture"), Tx.T("task dialog.button.skip culture"), Tx.T("task dialog.button.cancel") });
+            foreach (var culture in translation.Cultures)
+            {
+                if (!LoadedCultureNames.Contains(culture.Name))
+                {
+                    var result = TaskDialog.Show(
+                        owner: MainWindow.Instance,
+                        allowDialogCancellation: true,
+                        title: "TxEditor",
+                        mainInstruction: Tx.T("msg.import location.add new culture", "culture", culture.Name),
+                        content: Tx.T("msg.import location.add new culture.desc", "name", location.ToString(), "culture", culture.Name),
+                        customButtons:
+                            new[] { Tx.T("task dialog.button.add culture"), Tx.T("task dialog.button.skip culture"), Tx.T("task dialog.button.cancel") });
 
-            //        switch (result.CustomButtonResult)
-            //        {
-            //            case 0:
-            //                break;
-            //            case 1:
-            //                return true;
-            //            default:
-            //                return false;
-            //        }
-            //    }
+                    switch (result.CustomButtonResult)
+                    {
+                        case 0:
+                            break;
+                        case 1:
+                            return true;
+                        default:
+                            return false;
+                    }
+                }
 
-            //    ComposeKeys(culture.Name, culture.Keys);
-            //}
+                ComposeKeys(root, culture.Name, culture.Keys);
+            }
 
             return true;
         }
@@ -2227,6 +2263,7 @@ namespace Unclassified.TxEditor.ViewModels
 
         private void ComposeKeys(RootKeyViewModel root, string cultureName, IEnumerable<SerializedKey> keys)
 		{
+            if (root == null) throw new ArgumentNullException(nameof(root));
             // Add the new culture everywhere
 	        if (!LoadedCultureNames.Contains(cultureName)) AddNewCulture(root, cultureName, false);
 
@@ -2236,7 +2273,7 @@ namespace Unclassified.TxEditor.ViewModels
 		        return TextKeyViewModel.ValidateName(k.Key, out errorMessage);
 		    });
 
-		    foreach (var validKey in validKeys)
+            foreach (var validKey in validKeys)
 		    {
                 // TODO: Catch exceptions NonNamespaceExistsException and NamespaceExistsException for invalid files
                 var tk = FindOrCreateTextKey(root, validKey.Key);

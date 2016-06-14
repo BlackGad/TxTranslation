@@ -116,7 +116,7 @@ namespace Unclassified.TxEditor.Views
 					}
 					else
 					{
-					    vm.LoadLocations(fileNames.Select(f => new FileLocation(f)).Cast<ISerializeLocation>().ToArray());
+					    vm.Load(fileNames.Select(f => new FileLocation(f)).Cast<ISerializeLocation>().ToArray());
 					}
 					Activate();
 				}

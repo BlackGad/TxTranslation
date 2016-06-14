@@ -52,19 +52,19 @@ namespace Unclassified.TxEditor.Models
             return AvailableVersions.Enumerate<IVersionSerializer>().FirstOrDefault(r => r.IsValid(location));
         }
 
-        public IEnumerable<DetectedTranslation> DetectUniqueTranslations(string folder)
-        {
-            var locations = new List<ISerializeLocation>();
-            foreach (var file in PathHelper.EnumerateFiles(folder.TrimEnd('\\') + "\\"))
-            {
-                var localFile = file.ToLowerInvariant();
-                var extension = Path.GetExtension(localFile).ToLowerInvariant();
-                if (string.IsNullOrEmpty(extension)) continue;
-                if (extension.EndsWith(".xml") || extension.EndsWith(".txd")) locations.Add(new FileLocation(localFile));
-            }
+        //public IEnumerable<DetectedTranslation> DetectUniqueTranslations(string folder)
+        //{
+        //    var locations = new List<ISerializeLocation>();
+        //    foreach (var file in PathHelper.EnumerateFiles(folder.TrimEnd('\\') + "\\"))
+        //    {
+        //        var localFile = file.ToLowerInvariant();
+        //        var extension = Path.GetExtension(localFile).ToLowerInvariant();
+        //        if (string.IsNullOrEmpty(extension)) continue;
+        //        if (extension.EndsWith(".xml") || extension.EndsWith(".txd")) locations.Add(new FileLocation(localFile));
+        //    }
 
-            return DetectUniqueTranslations(locations.ToArray());
-        }
+        //    return DetectUniqueTranslations(locations.ToArray());
+        //}
 
         public IEnumerable<DetectedTranslation> DetectUniqueTranslations(params ISerializeLocation[] locations)
         {

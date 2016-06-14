@@ -193,7 +193,7 @@ namespace Unclassified.TxEditor
             // Load selected files
             if (filesToLoad.Count > 0)
             {
-                viewModel.LoadFiles(filesToLoad);
+                viewModel.Load(filesToLoad.Select(f => new FileLocation(f)).Cast<ISerializeLocation>().ToArray());
             }
 
             // Show the main window

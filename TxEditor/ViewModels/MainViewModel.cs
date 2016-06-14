@@ -64,7 +64,15 @@ namespace Unclassified.TxEditor.ViewModels
                     var culture = cultures[cultureTextViewModel.CultureName];
                     Func<string, bool> addKeyPredicate = value =>
                     {
-                        if (string.IsNullOrEmpty(cultureTextViewModel.Text)) return !textKey.StartsWith("Tx:") && Equals(culture, primaryCulture);
+                        
+                        if (string.IsNullOrEmpty(cultureTextViewModel.Text))
+                        {
+                            if (!textKey.StartsWith("Tx:") && Equals(culture, primaryCulture)) return true;
+                            if (cultureTextViewModel.AcceptMissing) return true;
+                            if (cultureTextViewModel.AcceptPlaceholders) return true;
+                            if (cultureTextViewModel.AcceptPunctuation) return true;
+                            return false;
+                        }
                         return true;
                     };
 
@@ -527,105 +535,54 @@ namespace Unclassified.TxEditor.ViewModels
 		{
 			if (!CheckModifiedSaved()) return;
 
-			var folderDlg = new OpenFolderDialog();
-			folderDlg.Title = Tx.T("msg.load folder.title");
-			if (folderDlg.ShowDialog(new Wpf32Window(MainWindow.Instance)) == true)
+		    var folderDlg = new OpenFolderDialog
+		    {
+		        Title = Tx.T("msg.load folder.title")
+		    };
+		    if (folderDlg.ShowDialog(new Wpf32Window(MainWindow.Instance)) == true)
 			{
 				DoLoadFolder(folderDlg.Folder);
 			}
 		}
 
-        public void DoLoadFolder(string folder)
-		{
-      //      var uniqueTranslations = SerializeProvider.Instance.DetectUniqueTranslations(folder).ToArray();
+	    public void DoLoadFolder(string folder)
+	    {
+	        var locations = new List<ISerializeLocation>();
+	        foreach (var file in Util.PathHelper.EnumerateFiles(folder.TrimEnd('\\') + "\\"))
+	        {
+	            var localFile = file.ToLowerInvariant();
+	            var extension = Path.GetExtension(localFile).ToLowerInvariant();
+	            if (string.IsNullOrEmpty(extension)) continue;
+	            if (extension.EndsWith(".xml") || extension.EndsWith(".txd")) locations.Add(new FileLocation(localFile));
+	        }
 
-      //      var selectedTranslation = uniqueTranslations.FirstOrDefault();
-      //      if (uniqueTranslations.Length > 1)
-		    //{
-      //          var result = TaskDialog.Show(
-      //              owner: MainWindow.Instance,
-      //              title: "TxEditor",
-      //              mainInstruction: Tx.T("msg.load folder.multiple dictionaries in folder"),
-      //              content: Tx.T("msg.load folder.multiple dictionaries in folder.desc"),
-      //              radioButtons: uniqueTranslations.Select(t=>t.Description.ShortName).ToArray(),
-      //              customButtons: new[] { Tx.T("task dialog.button.load"), Tx.T("task dialog.button.cancel") },
-      //              allowDialogCancellation: true);
-      //          if (result.CustomButtonResult != 0 ||
-      //              result.RadioButtonResult == null)
-      //          {
-      //              // Cancel or unset
-      //              return;
-      //          }
-      //          selectedTranslation = uniqueTranslations[result.RadioButtonResult.Value];
-      //      }
+	        Load(locations.ToArray());
+	    }
 
-      //      if (selectedTranslation == null || !selectedTranslation.DeserializeInstructions.Any())
-      //      {
-      //          App.WarningMessage(Tx.T("msg.load folder.no files found"));
-      //          return;
-      //      }
+	    private void OnLoadFile()
+	    {
+	        if (!CheckModifiedSaved()) return;
 
-		    //foreach (var instruction in selectedTranslation.DeserializeInstructions)
-		    //{
-		    //    var filename = ((FileLocation)instruction.Location).Filename;
-      //          try
-      //          {
-      //              var translation = instruction.Deserialize();
-      //              foreach (var culture in translation.Cultures)
-      //              {
-      //                  ComposeKeys(culture.Name, culture.Keys);
-      //              }
-      //          }
-      //          catch (Exception ex)
-      //          {
-      //              FL.Error("Error loading file", filename);
-      //              FL.Error(ex, "Loading XML dictionary file");
-      //              var result = TaskDialog.Show(
-      //                  owner: MainWindow.Instance,
-      //                  allowDialogCancellation: true,
-      //                  title: "TxEditor",
-      //                  mainIcon: VistaTaskDialogIcon.Error,
-      //                  mainInstruction: Tx.T("msg.load file.invalid file"),
-      //                  content: Tx.T("msg.load file.invalid file.desc", "name", filename, "msg", ex.Message),
-      //                  customButtons: new[] { Tx.T("task dialog.button.skip file"), Tx.T("task dialog.button.cancel") });
+	        var fileDlg = new OpenFileDialog
+	        {
+	            CheckFileExists = true,
+	            Filter = Tx.T("file filter.tx dictionary files") + " (*.txd)|*.txd|" +
+	                     Tx.T("file filter.xml files") + " (*.xml)|*.xml|" +
+	                     Tx.T("file filter.all files") + " (*.*)|*.*",
+	            Multiselect = true,
+	            ShowReadOnly = false,
+	            Title = Tx.T("msg.load file.title")
+	        };
+	        if (fileDlg.ShowDialog(MainWindow.Instance) == true)
+	        {
+	            Load(fileDlg.FileNames.Select(f => new FileLocation(f)).Cast<ISerializeLocation>().ToArray());
+	        }
+	    }
 
-      //              if(result.CustomButtonResult == 1) break;
-      //          }
-      //      }
-
-      //      RootTextKey.Location = selectedTranslation.DeserializeInstructions.First().Location;
-      //      RootTextKey.Serializer = selectedTranslation.DeserializeInstructions.First().Serializer;
-
-      //      SortCulturesInTextKey(RootTextKey);
-      //      DeletedCultureNames.Clear();
-      //      ValidateTextKeysDelayed();
-      //      StatusText = Tx.T("statusbar.n files loaded", selectedTranslation.DeserializeInstructions.Length) + Tx.T("statusbar.n text keys defined", TextKeys.Count);
-      //      RootTextKey.HasUnsavedChanges = false;
-      //      UpdateTitle();
-      //      ClearViewHistory();
-        }
-
-		private void OnLoadFile()
-		{
-			if (!CheckModifiedSaved()) return;
-
-			var fileDlg = new OpenFileDialog();
-			fileDlg.CheckFileExists = true;
-			fileDlg.Filter = Tx.T("file filter.tx dictionary files") + " (*.txd)|*.txd|" +
-				Tx.T("file filter.xml files") + " (*.xml)|*.xml|" +
-				Tx.T("file filter.all files") + " (*.*)|*.*";
-			fileDlg.Multiselect = true;
-			fileDlg.ShowReadOnly = false;
-			fileDlg.Title = Tx.T("msg.load file.title");
-			if (fileDlg.ShowDialog(MainWindow.Instance) == true)
-			{
-                LoadLocations(fileDlg.FileNames.Select(f=>new FileLocation(f)).Cast<ISerializeLocation>().ToArray());
-			}
-		}
-
-	    public void LoadLocations(params ISerializeLocation[] locations)
+	    public void Load(params ISerializeLocation[] locations)
 	    {
 	        var translations = SerializeProvider.Instance.DetectUniqueTranslations(locations).ToArray();
+
 	        int filesLoaded = 0;
 	        foreach (var detectedTranslation in translations)
 	        {
@@ -2098,39 +2055,6 @@ namespace Unclassified.TxEditor.ViewModels
 
 		#region XML loading methods
 
-		public void LoadFiles(IEnumerable<string> fileNames)
-		{
-			OnNewTranslation();
-
-   //         int count = 0;
-			//string prevPrimaryCulture = null;
-			//List<string> primaryCultureFiles = new List<string>();
-
-			//foreach (string _fileName in fileNames.Distinct())
-			//{
-			//	var fileName = _fileName;
-			//    if (!Path.IsPathRooted(fileName)) fileName = Path.GetFullPath(fileName);
-			//    if (!LoadFrom(new FileLocation(fileName))) break;
-			//    count++;
-
-			//    if (PrimaryCulture != prevPrimaryCulture) primaryCultureFiles.Add(PrimaryCulture);
-
-			//    prevPrimaryCulture = PrimaryCulture;
-			//}
-			//if (primaryCultureFiles.Count > 1)
-			//{
-			//	//Display a warning if multiple (and which) files claimed to be the primary culture, and which has won
-			//	if (App.SplashScreen != null)
-			//	{
-			//		App.SplashScreen.Close(TimeSpan.Zero);
-			//	}
-			//	App.WarningMessage(Tx.T("msg.load file.multiple primary cultures", "list", string.Join(", ", primaryCultureFiles), "name", PrimaryCulture));
-			//}
-			//ValidateTextKeysDelayed();
-			//StatusText = Tx.T("statusbar.n files loaded", count) + Tx.T("statusbar.n text keys defined", TextKeys.Count);
-   //         RootTextKey.HasUnsavedChanges = false;
-        }
-
         private DialogResult Import(RootKeyViewModel root, DeserializeInstruction instruction)
         {
             if (root == null) throw new ArgumentNullException(nameof(root));
@@ -2179,67 +2103,15 @@ namespace Unclassified.TxEditor.ViewModels
                 }
 
                 ComposeKeys(root, culture.Name, culture.Keys);
+
+                if (culture.IsPrimary)
+                {
+                    PrimaryCulture = culture.Name;
+                }
             }
+            
 
             return DialogResult.OK;
-        }
-
-        private bool LoadFrom(ISerializeLocation location)
-        {
-            //SerializedTranslation translation;
-            //IVersionSerializerDescription serializer;
-            //try
-            //{
-            //    var serializeProvider = SerializeProvider.Instance;
-
-            //    serializer = serializeProvider.DetectSerializer(location);
-            //    translation = serializeProvider.LoadFrom(location, serializer).Deserialize();
-            //}
-            //catch (Exception ex)
-            //{
-            //    FL.Error("Error loading file", location.ToString());
-            //    FL.Error(ex, "Loading XML dictionary file");
-            //    var result = TaskDialog.Show(
-            //        owner: MainWindow.Instance,
-            //        allowDialogCancellation: true,
-            //        title: "TxEditor",
-            //        mainIcon: VistaTaskDialogIcon.Error,
-            //        mainInstruction: Tx.T("msg.load file.invalid file"),
-            //        content: Tx.T("msg.load file.invalid file.desc", "name", location.ToString(), "msg", ex.Message),
-            //        customButtons: new[] { Tx.T("task dialog.button.skip file"), Tx.T("task dialog.button.cancel") });
-
-            //    return result.CustomButtonResult == 0;
-            //}
-
-            //// Don't mix template and non-template files (not relevant when importing a file)
-            //if (translation.IsTemplate && !RootTextKey.IsTemplate && LoadedCultureNames.Count > 0 || !translation.IsTemplate && RootTextKey.IsTemplate)
-            //{
-            //    FL.Warning("Trying to mix template and non-template files on loading");
-            //    var result = TaskDialog.Show(
-            //        owner: MainWindow.Instance,
-            //        allowDialogCancellation: true,
-            //        title: "TxEditor",
-            //        mainIcon: VistaTaskDialogIcon.Warning,
-            //        mainInstruction: Tx.T("msg.load file.mixed templates"),
-            //        content: Tx.T("msg.load file.mixed templates.desc", "name", location.ToString()),
-            //        customButtons: new[] { Tx.T("task dialog.button.skip file"), Tx.T("task dialog.button.cancel") });
-
-            //    return result.CustomButtonResult == 0;
-            //}
-            //RootTextKey.IsTemplate = translation.IsTemplate;
-
-
-            //foreach (var culture in translation.Cultures.Enumerate())
-            //{
-            //    ComposeKeys(culture.Name, culture.Keys);
-            //}
-
-            //RootTextKey.Location = location;
-
-            //RootTextKey.Serializer = serializer;
-            //PrimaryCulture = translation.Cultures.FirstOrDefault(c => c.IsPrimary)?.Name ?? PrimaryCulture;
-
-            return true;
         }
 
         private void ComposeKeys(RootKeyViewModel root, string cultureName, IEnumerable<SerializedKey> keys)
@@ -2717,14 +2589,16 @@ namespace Unclassified.TxEditor.ViewModels
 
 			if (!string.IsNullOrWhiteSpace(ScanDirectory))
 			{
-				SelectFileViewModel sfVM = new SelectFileViewModel(ScanDirectory);
-				SelectFileWindow sfw = new SelectFileWindow();
-				sfw.WindowStartupLocation = WindowStartupLocation.CenterOwner;
-				sfw.Owner = MainWindow.Instance;
-				sfw.DataContext = sfVM;
-				if (sfw.ShowDialog() == true)
+				var sfVM = new SelectFileViewModel(ScanDirectory);
+			    var sfw = new SelectFileWindow
+			    {
+			        WindowStartupLocation = WindowStartupLocation.CenterOwner,
+			        Owner = MainWindow.Instance,
+			        DataContext = sfVM
+			    };
+			    if (sfw.ShowDialog() == true)
 				{
-					LoadFiles(sfVM.SelectedFileNames);
+				    Load(sfVM.SelectedFileNames.Select(f => new FileLocation(f)).Cast<ISerializeLocation>().ToArray());
 				}
 			}
 		}
